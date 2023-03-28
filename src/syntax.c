@@ -467,7 +467,48 @@ int bws(char **sp, char *s_end, Node ***n)
 
 int connection(char **sp, char *s_end, Node ***n)
 {
-    ;
+    Node *cur;
+    char *p1, *p2, *p3;
+
+    createnode(*n, "Connection", *sp, 0, NULL, NULL);
+    
+    cur = &((**n)->child);
+
+    p1 = *sp;
+    while (1) {
+        p2 = *sp;
+        if (comma_s(sp, s_end, &cur)
+        || ows(sp, s_end, &cur)) {
+            *sp = p2;
+            break;
+        }
+    }
+    if (connection_option(sp, s_end, &cur)){
+        *sp = p1;
+        free(**n);
+        **n = NULL;
+        return 1;
+    }
+    while (1) {
+        p2 = *sp;
+        if (ows(sp, s_end, &cur)
+        || comma_s(sp, s_end, &cur)) {
+            *sp = p2;
+            break;
+        }
+        p3 = *sp;
+        if (ows(sp, s_end, &cur)
+        || connection_option(sp, s_end, &cur)){
+            *sp = p3;
+        }
+    }
+    cur = (**n)->child;
+    while (cur) {
+        (**n)->len += cur->len;
+        cur = cur->sibling;
+    }
+    *n = &((**n)->sibling);
+    return 0;
 }
 
 int connection_option(char **sp, char *s_end, Node ***n)
@@ -487,7 +528,10 @@ int host(char **sp, char *s_end, Node ***n)
 
 int ows(char **sp, char *s_end, Node ***n)
 {
-    ;
+    while (s_end - *sp + 1 > 0 && (*sp == ' ' || *sp == '\t')) {
+        (*sp)++;
+    }
+    return 0;
 }
 
 int rws(char **sp, char *s_end, Node ***n)
@@ -666,11 +710,6 @@ int uri_host(char **sp, char *s_end, Node ***n)
 }
 
 int accept(char **sp, char *s_end, Node ***n)
-{
-    ;
-}
-
-int ows(char **sp, char *s_end, Node ***n)
 {
     ;
 }
@@ -1212,7 +1251,29 @@ int token68(char **sp, char *s_end, Node ***n)
 
 int connection_header(char **sp, char *s_end, Node ***n)
 {
-    ;
+    Node *cur;
+    char *p;
+
+    createnode(*n, "Connection-header", *sp, 0, NULL, NULL);
+
+    p = *sp;
+    if (connection_s(sp, s_end, &cur)
+    || colon_s(sp, s_end, &cur)
+    || ows(sp, s_end, &cur)
+    || connection(sp, s_end, &cur)
+    || ows(sp, s_end, &cur)) {
+        *sp = p;
+        free(**n);
+        **n = NULL;
+        return 1;
+    }
+    cur = (**n)->child;
+    while (cur) {
+        (**n)->len += cur->len;
+        cur = cur->sibling;
+    }
+    *n = &((**n)->sibling);
+    return 0;
 }
 
 int content_length_header(char **sp, char *s_end, Node ***n)
@@ -1412,6 +1473,67 @@ int cookie_string(char **sp, char *s_end, Node ***n)
 
 int header_field(char **sp, char *s_end, Node ***n)
 {
-    ;
+    Node *cur;
+    char *p;
+
+    createnode(*n, "header-field", *sp, 0, NULL, NULL);
+    
+    cur = &((**n)->child);
+
+    if (connection_header(sp, s_end, &cur)
+    && content_length_header(sp, s_end, &cur)
+    && content_type_header(sp, s_end, &cur)
+    && cookie_header(sp, s_end, &cur)
+    && transfer_encoding_header(sp, s_end, &cur)
+    && expect_header(sp, s_end, &cur)
+    && host_header(sp, s_end, &cur)) {
+        p = *sp;
+        if (field_name(sp, s_end, &cur)
+        || colon_s(sp, s_end, &cur)
+        || ows(sp, s_end, &cur)
+        || field_value(sp, s_end, &cur)
+        || ows(sp, s_end, &cur)) {
+            *sp = p;
+            free(**n);
+            **n = NULL;
+            return 1;
+        }
+    }
+    (**n)->len = (**n)->child->len;
+    *n = &((**n)->sibling);
+    return 0;
 }
 
+int connection_s(char **sp, char *s_end, Node ***n)
+{
+    int i;
+    const char *s;
+
+    s = "connection";
+
+    if (s_end - *sp + 1 < strlen(s))
+        return 1;
+    for (i = 0; i < strlen(s); i++){
+        if (s[i] != tolower((*sp)[i]))
+            return 1;
+    }
+    *sp += strlen(s);
+    return 0;
+}
+
+int colon_s(char **sp, char *s_end, Node ***n)
+{
+    int i;
+    const char *s;
+
+    s = ":";
+
+    if (s_end - *sp + 1 < strlen(s))
+        return 1;
+    for (i = 0; i < strlen(s); i++){
+        if (s[i] != tolower((*sp)[i]))
+            return 1;
+    }
+    *sp += strlen(s);
+    return 0;
+}
