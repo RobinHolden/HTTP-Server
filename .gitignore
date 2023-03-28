@@ -1,3 +1,4 @@
 .gdbinit
 gdb.txt
 http-server
+tmp.out
