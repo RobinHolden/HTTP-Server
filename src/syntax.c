@@ -18,7 +18,7 @@ http_message(char **sp, char *s_end)
     createnode(&root, "HTTP-message", *sp, s_end - *sp + 1, NULL, NULL);
     cur = &(root->child);
 
-    if (startline(sp, s_end, &cur))
+    if (start_line(sp, s_end, &cur))
         return 1;
     i = 0;
     while (1){
