@@ -3,22 +3,10 @@
 
 #include "tree.h"
 
-int message(char **sp, char *s_end);
-int debut(char **sp, char *s_end, Node ***n);
-int fin(char **sp, char *s_end, Node ***n);
-int mot(char **sp, char *s_end, Node ***n);
-int nombre(char **sp, char *s_end, Node ***n);
-int ponct(char **sp, char *s_end, Node ***n);
-int separateur(char **sp, char *s_end, Node ***n);
+int http_message(char **sp, char *s_end);
 int cat(int (*f1)(char **, char *, Node ***), int (*f2)(char **, char *, Node ***),char **sp, char *s_end, Node ***cur);
-/*
-nombre = 1*DIGIT
-ponct = "," / "." / "!" / "?" / ":"
-separateur = SP / HTAB / "-" / "_"
-debut = "start"
-fin = "fin"
-mot = 1*ALPHA separateur
-message = debut 2*( mot ponct / nombre separateur ) [ponct] fin LF
-*/
+
+int header_field(char **sp, char *s_end, Node ***n);
+int crlf(char **sp, char *s_end, Node ***n);
 
 #endif

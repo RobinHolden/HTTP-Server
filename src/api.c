@@ -47,5 +47,5 @@ parseur(char *req, int len)
     char *s_end;
 
     s_end = req + len - 1;
-    return message(&req, s_end);
+    return !http_message(&req, s_end);
 }
