@@ -2,7 +2,6 @@
 
 #include "api.h"
 #include "syntax.h"
-#include "tree.h"
 
 void *
 getRootTree()

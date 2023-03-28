@@ -26,7 +26,7 @@ searchNodes(Node *start, char *rulename)
 
     l = childList = siblingList = NULL;
 
-    if (start == NULL)
+    if (rulename == NULL)
         return NULL;
     if (!strcmp(start->rulename, rulename)) {
         l = emalloc(sizeof(_Token));
