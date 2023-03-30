@@ -2,11 +2,12 @@
     Node *cur;
     char *p;
 
-    createnode(*n, "header-field", *sp, 0, NULL, NULL);
+    createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-`end`
+
+
     cur = (**n)->child;
     while (cur) {
         (**n)->len += cur->len;
@@ -23,22 +24,52 @@
         }
     }
 
-`(rulename1 rulename2)`
-
-    p1 = *sp;
-    if (rulename1(sp, s_end, &cur)
-    || rulename2(sp, s_end, &cur)) {
-        *sp = p1;
+`*(rulename1 rulename 2)`
+    while (1) {
+        p = *sp;
+        if (rulename1(sp, s_end, &cur)
+        || rulename2(sp, s_end, &cur)) {
+            *sp = p;
+            break;
+        }
     }
 
 `rulename`
     if (rulename(sp, s_end, &cur)) {
-            free(**n);
+            freeTree(**n);
             **n = NULL;
             return 1;
     }
 
+`(rulename1 rulename2)`
+
+    p = *sp;
+    if (rulename1(sp, s_end, &cur)
+    || rulename2(sp, s_end, &cur)) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+
+`rulename1 / rulename2`
+    if (rulename1(sp, s_end, &cur)
+    && rulename2(sp, s_end, &cur)) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+
+`[rulename1 rulename2]`
+    p1 = *sp;
+    if (rulename1(sp, s_end, &cur)
+    || rulename2(sp, s_end, &cur))
+        *sp = p1;
+
 `"string"`
+int
+string_s(char **sp, char *s_end, Node ***n)
+{
     int i;
     const char *s;
 
@@ -47,8 +78,14 @@
     if (s_end - *sp + 1 < strlen(s))
         return 1;
     for (i = 0; i < strlen(s); i++){
-        if (s[i] != tolower((*sp)[i]))
+        if (tolower(s[i]) != tolower((*sp)[i]))
             return 1;
     }
+    createnode(*n, s, *sp, strlen(s), NULL, NULL);
+    *n = &((**n)->sibling);
     *sp += strlen(s);
     return 0;
+}
+
+`cur`
+cur : transfer_extension
