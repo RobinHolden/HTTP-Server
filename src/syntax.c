@@ -2346,7 +2346,19 @@ qdtext(char **sp, char *s_end, Node ***n)
         
     cur = &((**n)->child);
 
-
+    if (htab(sp, s_end, &cur)
+    && space(sp, s_end, &cur)
+    && exclamation_s(sp, s_end, &cur)) {
+        if (s_end - *sp + 1 < 1 || **sp < 0x23 || **sp > 0x5B){
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+        }
+        createnode(*n, "qdtext", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
+    }
 
     cur = (**n)->child;
     while (cur) {
@@ -2394,12 +2406,14 @@ quoted_string(char **sp, char *s_end, Node ***n)
             return 1;
     }
     while (1) {
-        p = *sp;
-        if (rulename1(sp, s_end, &cur)
-        || rulename2(sp, s_end, &cur)) {
-            *sp = p;
+        if (qdtext(sp, s_end, &cur)
+        && quoted_pair(sp, s_end, &cur))
             break;
-        }
+    }
+    if (dquote(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
     }
 
     cur = (**n)->child;

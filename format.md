@@ -73,6 +73,20 @@
     || rulename2(sp, s_end, &cur))
         *sp = p1;
 
+`rulename1 /rulename2 / charset`
+    if (rulename1(sp, s_end, &cur)
+    && rulename2(sp, s_end, &cur)) {
+        if (s_end - *sp + 1 < 1 || **sp < charset_start || **sp > charset_end){
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+        }
+        createnode(*n, "rulename", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
+    }
+
 `"string"`
 int
 string_s(char **sp, char *s_end, Node ***n)
@@ -95,4 +109,4 @@ string_s(char **sp, char *s_end, Node ***n)
 }
 
 `cur`
-cur : transfer_extension
+cur : quoted_string
