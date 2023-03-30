@@ -8,8 +8,3 @@ $(MAIN): $(SRC_C)
 clean:
 	rm -rf $(MAIN) src/*~ src/*.swap .vscode gdb.txt
 
-# Tapez "make tar" pour faire une archive du dossier avant chaque rendu.
-
-tar: clean
-	@ dir=$$(basename "$$PWD") && cd .. && tar cvfz $(AUTEURS).tgz  "$$dir"
-	@ echo "==="; echo "Created ../$(AUTEURS).tgz"

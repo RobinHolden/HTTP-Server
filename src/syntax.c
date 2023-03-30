@@ -9,7 +9,6 @@
 int
 http_message(char **sp, char *s_end)
 {
-    int i;
     Node **cur;
 
     if (*sp > s_end)
@@ -20,22 +19,24 @@ http_message(char **sp, char *s_end)
 
     if (start_line(sp, s_end, &cur)){
         freeTree(root);
+        root = NULL;
         return 1;
     }
-    i = 0;
-    while (1){
-	    if (cat(header_field, crlf, sp, s_end, &cur))
-	        break;
-	    i++;
+    while (1) {
+        if (header_field(sp, s_end, &cur)
+        || crlf(sp, s_end, &cur)) {
+            break;
+        }
     }
     if (crlf(sp, s_end, &cur)){
         freeTree(root);
+        root = NULL;
         return 1;
     }
     message_body(sp, s_end, &cur);
-
-    if (*sp != s_end){
+    if (*sp <= s_end){
         freeTree(root);
+        root = NULL;
         return 1;
     }
     return 0;
@@ -44,82 +45,70 @@ http_message(char **sp, char *s_end)
 int
 crlf(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    int i;
+    const char *s;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
+    s = "\r\n";
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (s_end - *sp + 1 < strlen(s))
+        return 1;
+    for (i = 0; i < strlen(s); i++){
+        if (tolower(s[i]) != tolower((*sp)[i]))
+            return 1;
     }
+    createnode(*n, "CRLF", *sp, strlen(s), NULL, NULL);
     *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-http_message(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
+    *sp += strlen(s);
     return 0;
 }
 
 int
 http_name(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    int i;
+    const char *s;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
+    s = "HTTP";
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (s_end - *sp + 1 < strlen(s))
+        return 1;
+    for (i = 0; i < strlen(s); i++){
+        if (tolower(s[i]) != tolower((*sp)[i]))
+            return 1;
     }
+    createnode(*n, "HTTP-name", *sp, strlen(s), NULL, NULL);
     *n = &((**n)->sibling);
+    *sp += strlen(s);
     return 0;
 }
 
 int
 http_version(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "HTTP-version", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
+    p = *sp;
+    if(http_name(sp, s_end, &cur)
+    || string(sp, s_end, &cur, "/")
+    || digit(sp, s_end, &cur)
+    || string(sp, s_end, &cur, ".")
+    || digit(sp, s_end, &cur))
+    {
+      *sp = p;
+      freeTree(**n);
+      **n = NULL;
+      return 1;
 
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -128,19 +117,32 @@ http_version(char **sp, char *s_end, Node ***n)
 int
 field_content(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
+    int i;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "field-content", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    if(field_vchar(sp, s_end, &cur))
+        return 1;
+    p = *sp;
+    i = 0;
+    while(1)
+    {
+        if(space(sp, s_end, &cur) && htab(sp, s_end, &cur)){
+            break;
+        }
+        i++;
+    }
+    if (i < 1 || field_vchar(sp, s_end, &cur))
+        *sp = p;
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -149,19 +151,19 @@ field_content(char **sp, char *s_end, Node ***n)
 int
 field_name(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "field-name", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    if(token(sp, s_end, &cur))
+        return 1;
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -170,19 +172,22 @@ field_name(char **sp, char *s_end, Node ***n)
 int
 field_value(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "field-value", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    while(1)
+    {
+      if(field_content(sp, s_end, &cur) && obs_fold(sp, s_end, &cur))
+        break;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -191,40 +196,24 @@ field_value(char **sp, char *s_end, Node ***n)
 int
 field_vchar(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "field_vchar", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if(vchar(sp, s_end, &cur) && obs_text(sp, s_end, &cur))
+    {
+      freeTree(**n);
+      **n = NULL;
+      return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-last_chunk(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -233,19 +222,22 @@ last_chunk(char **sp, char *s_end, Node ***n)
 int
 message_body(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "message body", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    while(1)
+    {
+      if(octet(sp, s_end, &cur))
+        break;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -254,19 +246,27 @@ message_body(char **sp, char *s_end, Node ***n)
 int
 method(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "method", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    p=*sp;
+    if(token(sp, s_end, &cur))
+    {
+      *sp=p;
+      freeTree(**n);
+      **n=NULL;
+      return 1;
+    }
 
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -275,19 +275,38 @@ method(char **sp, char *s_end, Node ***n)
 int
 obs_fold(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
+    int i;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+
     cur = &((**n)->child);
+    p = *sp;
+    if(crlf(sp, s_end, &cur))
+      return 1;
+    i = 0;
+    while(1)
+    {
 
+      if(space(sp, s_end, &cur) && htab(sp, s_end, &cur)){
+        break;
+      }
+      i++;
+    }
 
+    if(i<1){
+      *sp = p;
+      freeTree(**n);
+      **n=NULL;
+      return 1;
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    }
+
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -296,40 +315,41 @@ obs_fold(char **sp, char *s_end, Node ***n)
 int
 obs_text(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (s_end - *sp + 1 < 1)
+        return 1;
+    if (**sp >= 0x80 && **sp <= 0xFF) {
+        createnode(*n, "obs-text", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
     }
-    *n = &((**n)->sibling);
-    return 0;
+    return 1;
 }
 
 int
 origin_form(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "origin-form", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
+    
+    if(absolute_path(sp, s_end,&cur) )
+    {
+      freeTree(**n);
+      **n=NULL;
+      return 1;
+    }
+    p=*sp;
+    if(string(sp, s_end,&cur, "?") || query(sp,s_end,&cur) )
+      *sp=p;
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -338,19 +358,25 @@ origin_form(char **sp, char *s_end, Node ***n)
 int
 reason_phrase(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "reason-phrase", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    while(1)
+    {
+      if(htab(sp, s_end, &cur)
+      && space(sp, s_end, &cur)
+      && vchar(sp, s_end, &cur)
+      && obs_text(sp, s_end, &cur))
+        break;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -359,19 +385,31 @@ reason_phrase(char **sp, char *s_end, Node ***n)
 int
 request_line(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "request-line", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    p = *sp;
+    if(method(sp, s_end, &cur)
+    || space(sp, s_end, &cur)
+    || request_target(sp, s_end, &cur)
+    || space(sp, s_end, &cur)
+    || http_version(sp, s_end, &cur)
+    || crlf(sp, s_end, &cur))
+    {
+      *sp = p;
+      freeTree(**n);
+      **n = NULL;
+      return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -380,19 +418,25 @@ request_line(char **sp, char *s_end, Node ***n)
 int
 request_target(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "request-target", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
+    p=*sp;
+    if(origin_form(sp,s_end,&cur))
+    {
+      *sp=p;
+      freeTree(**n);
+      **n=NULL;
+      return 1;
+    }
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -401,19 +445,23 @@ request_target(char **sp, char *s_end, Node ***n)
 int
 start_line(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "start-line", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    if(request_line(sp, s_end, &cur) && status_line(sp, s_end, &cur))
+    {
+      freeTree(**n);
+      **n=NULL;
+      return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -422,19 +470,27 @@ start_line(char **sp, char *s_end, Node ***n)
 int
 status_code(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "status-code", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
+    p =*sp;
+    if(digit(sp, s_end, &cur)
+    || digit(sp, s_end, &cur)
+    || digit(sp, s_end, &cur))
+    {
+      *sp = p;
+      freeTree(**n);
+      **n = NULL;
+      return 1;
+    }
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -443,187 +499,30 @@ status_code(char **sp, char *s_end, Node ***n)
 int
 status_line(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "status-line", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    p=*sp;
+    if(http_version(sp, s_end, &cur)
+    || space(sp, s_end, &cur)
+    || status_code(sp, s_end, &cur)
+    || space(sp, s_end, &cur)
+    || reason_phrase(sp, s_end, &cur)
+    || crlf(sp, s_end, &cur))
+    {
+      *sp = p;
+      freeTree(**n);
+      **n = NULL;
+      return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-uri(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-hier_part(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-uri_reference(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-absolute_uri(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-relative_ref(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-relative_part(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-scheme(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-absolute_form(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -632,250 +531,86 @@ absolute_form(char **sp, char *s_end, Node ***n)
 int
 absolute_path(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
+    int i;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "absolute-path", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    i = 0;
+    while(1)
+    {
+      if(string(sp, s_end, &cur, "/") || segment(sp, s_end, &cur) )
+      {
+        break;
+      }
+      i++;
+    }
 
+    if(i<1){
+      freeTree(**n);
+      **n = NULL;
+      return 1;
+    }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
 }
 
 int
-asterisk_form(char **sp, char *s_end, Node ***n)
+Host(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Host", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    if (uri_host(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+    }
+    p = *sp;
+    if (string(sp, s_end, &cur, ":")
+    || port(sp, s_end, &cur))
+        *sp = p;
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
 }
 
 int
-authority_form(char **sp, char *s_end, Node ***n)
+uri_host(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Host", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (host(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-chunk(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunk_data(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunk_ext(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunk_ext_name(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunk_ext_val(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunk_size(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-chunked_body(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-authority(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-userinfo(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -884,19 +619,24 @@ userinfo(char **sp, char *s_end, Node ***n)
 int
 host(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "host", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    if (ip_literal(sp, s_end, &cur)
+    && ipv4address(sp, s_end, &cur)
+    && reg_name(sp, s_end, &cur)) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -905,19 +645,22 @@ host(char **sp, char *s_end, Node ***n)
 int
 port(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "port", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    while (1) {
+        if (digit(sp, s_end, &cur)) {
+            break;
+        }
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -926,19 +669,33 @@ port(char **sp, char *s_end, Node ***n)
 int
 ip_literal(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "IP-literal", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    if (string(sp, s_end, &cur, "[")) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+    }
+    if (ipv6address(sp, s_end, &cur)
+    && ipvfuture(sp, s_end, &cur)) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+    if (string(sp, s_end, &cur, "]")) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -947,61 +704,166 @@ ip_literal(char **sp, char *s_end, Node ***n)
 int
 ipvfuture(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
+    int i;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "IPvFuture", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    p = *sp;
+    if (string(sp, s_end, &cur, "v")) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+    i = 0;
+    while (1) {
+        if (hexdig(sp, s_end, &cur)) {
+            break;
+        }
+        i++;
+    }
+    if (i < 1){
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+    if (string(sp, s_end, &cur, ".")) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
+    i = 0;
+    while (1) {
+        if (unreserved(sp, s_end, &cur)
+        && sub_delims(sp, s_end, &cur)
+        && string(sp, s_end, &cur, ":")) {
+            break;
+        }
+        i++;
+    }
+    if (i < 1){
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
 }
+
+
 
 int
-ipv6address(char **sp, char *s_end, Node ***n)
+ipv6address(char **sp, char *s_end, Node ***n){return 0;}
+/* CATASTROPHE 
 {
-    Node *cur;
-    char *p;
+    Node **cur;
+    char *p1;
+    int i;
+    int next, end, noopt;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    next = end = noopt = 0;
+    p1 = *sp;
+    for (i = 0; i < 6; i++){
+        if (h16(sp, s_end, &cur)
+        || colon_s(sp, s_end, &cur)) {
+            *sp = p1;
+            next = 1;
+            break;
+        }
+    }
+    if (!next && !ls32(sp, s_end, &cur)) {
+        end = 1;
+    }
+    next = 0;
+    if (!end){
+        if (double_colon_s(sp, s_end, &cur)) {
+                next = 1;
+        }
+        if (!next){
+            for (i = 0; i < 5; i++){
+                if (h16(sp, s_end, &cur)
+                || colon_s(sp, s_end, &cur)) {
+                    *sp = p1;
+                    next = 1;
+                    break;
+                }
+            }
+        }
+        if (!next && !ls32(sp, s_end, &cur)){
+            end = 1;
+        }
 
+        next = 0;
+        if (!end){
+            h16(sp, s_end, &cur);
+            if (double_colon_s(sp, s_end, &cur)) {
+                next = 1;
+            }
+            if (!next){
+                for (i = 0; i < 5; i++){
+                    if (h16(sp, s_end, &cur)
+                    || colon_s(sp, s_end, &cur)) {
+                        *sp = p1;
+                        next = 1;
+                        break;
+                    }
+                }
+            }
+            if (!next && !ls32(sp, s_end, &cur)){
+                end = 1;
+            }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+            next = 0;
+            if (!end){
+                p1 = *sp;
+                if (h16(sp, s_end, &cur))
+                    noopt = 1;
+                
+            }
+        }
+    }
+
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
 }
+*/
 
 int
 h16(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "h16", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
 
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1010,19 +872,18 @@ h16(char **sp, char *s_end, Node ***n)
 int
 ls32(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "ls32", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
 
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1031,19 +892,31 @@ ls32(char **sp, char *s_end, Node ***n)
 int
 ipv4address(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "IPv4address", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    p = *sp;
+    if (dec_octet(sp, s_end, &cur)
+    || string(sp, s_end, &cur, ".")
+    || dec_octet(sp, s_end, &cur)
+    || string(sp, s_end, &cur, ".")
+    || dec_octet(sp, s_end, &cur)
+    || string(sp, s_end, &cur, ".")
+    || dec_octet(sp, s_end, &cur)) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1052,19 +925,43 @@ ipv4address(char **sp, char *s_end, Node ***n)
 int
 dec_octet(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "dec-octet", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    p = *sp;
+    if (string(sp, s_end, &cur, "25")
+    || **sp < 0x30 || **sp > 0x35){
+        *sp = p;
+        if (string(sp, s_end, &cur, "2")
+        || **sp < 0x30 || **sp > 0x34
+        || digit(sp, s_end, &cur)){
+            *sp = p;
+            if (string(sp, s_end, &cur, "1")
+            || digit(sp, s_end, &cur)
+            || digit(sp, s_end, &cur)){
+                *sp = p;
+                if (**sp < 0x31 || **sp > 0x39
+                || digit(sp, s_end, &cur)){
+                    *sp = p;
+                    if (digit(sp, s_end, &cur)){
+                        *sp = p;
+                        freeTree(**n);
+                        **n = NULL;
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1073,145 +970,23 @@ dec_octet(char **sp, char *s_end, Node ***n)
 int
 reg_name(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "reg-name", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (1) {
+        if (unreserved(sp, s_end, &cur)
+        && pct_encoded(sp, s_end, &cur)
+        && sub_delims(sp, s_end, &cur))
+            break;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-path(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-path_abempty(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-path_absolute(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-path_noscheme(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-path_rootless(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-path_empty(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1220,61 +995,22 @@ path_empty(char **sp, char *s_end, Node ***n)
 int
 segment(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "segment", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    while(1){
+      if(pchar(sp, s_end, &cur))
+        break;
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-segment_nz(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-segment_nz_nc(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1283,19 +1019,23 @@ segment_nz_nc(char **sp, char *s_end, Node ***n)
 int
 pchar(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    createnode(*n, "pchar", *sp, 0, NULL, NULL);
+
     cur = &((**n)->child);
 
+    if(unreserved(sp, s_end, &cur) && pct_encoded(sp, s_end, &cur) && sub_delims(sp, s_end, &cur) && string(sp, s_end, &cur, ":") &&string(sp, s_end, &cur, "@"))
+    {
+      freeTree(**n);
+      **n =NULL;
+      return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1304,40 +1044,22 @@ pchar(char **sp, char *s_end, Node ***n)
 int
 query(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while(1)
+    {
+      if(pchar(sp, s_end, &cur) && string(sp, s_end, &cur, "!") && string(sp, s_end, &cur, "?"))
+        break;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-fragment(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1346,19 +1068,27 @@ fragment(char **sp, char *s_end, Node ***n)
 int
 pct_encoded(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "pct-encoded", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    p = *sp;
+    if (string(sp, s_end, &cur, "%")
+    || hexdig(sp, s_end, &cur)
+    || hexdig(sp, s_end, &cur)) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1367,61 +1097,27 @@ pct_encoded(char **sp, char *s_end, Node ***n)
 int
 unreserved(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "unreserved", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (alpha(sp, s_end, &cur)
+    && digit(sp, s_end, &cur)
+    && string(sp, s_end, &cur, "-")
+    && string(sp, s_end, &cur, ".")
+    && string(sp, s_end, &cur, "_")
+    && string(sp, s_end, &cur, "~")) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-reserved(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-gen_delims(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1430,334 +1126,32 @@ gen_delims(char **sp, char *s_end, Node ***n)
 int
 sub_delims(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "sub-delims", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (string(sp, s_end, &cur, "!")
+    && string(sp, s_end, &cur, "$")
+    && string(sp, s_end, &cur, "&")
+    && string(sp, s_end, &cur, "\'")
+    && string(sp, s_end, &cur, "(")
+    && string(sp, s_end, &cur, ")")
+    && string(sp, s_end, &cur, "*")
+    && string(sp, s_end, &cur, "+")
+    && string(sp, s_end, &cur, ",")
+    && string(sp, s_end, &cur, ";")
+    && string(sp, s_end, &cur, "=")) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-language_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
+    
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-alphanum(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-language_tag(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-langtag(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-language(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-extlang(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-script(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-region(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-variant(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-extension(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-singleton(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-privateuse(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-grandfathered(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-irregular(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-regular(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1766,10 +1160,9 @@ regular(char **sp, char *s_end, Node ***n)
 int
 bws(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "BWS", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
@@ -1779,10 +1172,10 @@ bws(char **sp, char *s_end, Node ***n)
             return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1791,7 +1184,7 @@ bws(char **sp, char *s_end, Node ***n)
 int
 connection(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p1, *p2, *p3;
 
     createnode(*n, "Connection", *sp, 0, NULL, NULL);
@@ -1801,7 +1194,7 @@ connection(char **sp, char *s_end, Node ***n)
     p1 = *sp;
     while (1) {
         p2 = *sp;
-        if (comma_s(sp, s_end, &cur)
+        if (string(sp, s_end, &cur, ",")
         || ows(sp, s_end, &cur)) {
             *sp = p2;
             break;
@@ -1816,7 +1209,7 @@ connection(char **sp, char *s_end, Node ***n)
     while (1) {
         p2 = *sp;
         if (ows(sp, s_end, &cur)
-        || comma_s(sp, s_end, &cur)) {
+        || string(sp, s_end, &cur, ",")) {
             *sp = p2;
             break;
         }
@@ -1826,10 +1219,10 @@ connection(char **sp, char *s_end, Node ***n)
             *sp = p3;
         }
     }
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1838,19 +1231,22 @@ connection(char **sp, char *s_end, Node ***n)
 int
 connection_option(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "connection-option", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    if (token(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1859,40 +1255,33 @@ connection_option(char **sp, char *s_end, Node ***n)
 int
 content_length(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
+    int i;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Content-length", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    i = 0;
+    p = *sp;
+    while (1) {
+        if (digit(sp, s_end, &cur)) {
+            break;
+        }
+        i++;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
+    if (i < 1){
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-int
-host(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -1903,7 +1292,8 @@ ows(char **sp, char *s_end, Node ***n)
 {
     int i;
 
-    for (i = 0; s_end - *sp + 1 > 0 && ((*sp)[i] == ' ' || (*sp)[i] == '\t'); i++) {
+    for (i = 0; s_end - *sp + 1 > 0
+    && ((*sp)[i] == ' ' || (*sp)[i] == '\t'); i++) {
         ;
     }
     createnode(*n, "OWS", *sp, i, NULL, NULL);
@@ -1913,72 +1303,9 @@ ows(char **sp, char *s_end, Node ***n)
 }
 
 int
-rws(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-te(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-trailer(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
 transfer_encoding(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p1, *p2, *p3;
 
     createnode(*n, "Transfer-Encoding", *sp, 0, NULL, NULL);
@@ -1988,13 +1315,14 @@ transfer_encoding(char **sp, char *s_end, Node ***n)
     p1 = *sp;
     while (1) {
         p2 = *sp;
-        if (comma_s(sp, s_end, &cur)
+        if (string(sp, s_end, &cur, ",")
         || ows(sp, s_end, &cur)) {
             *sp = p2;
             break;
         }
     }
     if (transfer_coding(sp, s_end, &cur)) {
+            *sp = p1;
             freeTree(**n);
             **n = NULL;
             return 1;
@@ -2002,7 +1330,7 @@ transfer_encoding(char **sp, char *s_end, Node ***n)
     while (1) {
         p2 = *sp;
         if (ows(sp, s_end, &cur)
-        || comma_s(sp, s_end, &cur)) {
+        || string(sp, s_end, &cur, ",")) {
             *sp = p2;
             break;
         }
@@ -2012,325 +1340,10 @@ transfer_encoding(char **sp, char *s_end, Node ***n)
             *sp = p3;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-upgrade(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-via(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-comment(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-comment(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-connection_option(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-ctext(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-http_uri(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-fragment(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-https_uri(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-fragment(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-partial_uri(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-protocol(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-protocol_name(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-protocol_version(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-pseudonym(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2339,17 +1352,19 @@ pseudonym(char **sp, char *s_end, Node ***n)
 int
 qdtext(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "qdtext", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
     if (htab(sp, s_end, &cur)
     && space(sp, s_end, &cur)
-    && exclamation_s(sp, s_end, &cur)) {
-        if (s_end - *sp + 1 < 1 || **sp < 0x23 || **sp > 0x5B){
+    && string(sp, s_end, &cur, "!")
+    && obs_text(sp, s_end, &cur)) {
+        if (s_end - *sp + 1 < 1
+        || **sp < 0x23 || **sp > 0x5B
+        || **sp < 0x5D || **sp > 0x7E){
             freeTree(**n);
             **n = NULL;
             return 1;
@@ -2360,10 +1375,10 @@ qdtext(char **sp, char *s_end, Node ***n)
         return 0;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2372,19 +1387,26 @@ qdtext(char **sp, char *s_end, Node ***n)
 int
 quoted_pair(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "quoted-pair", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    if (string(sp, s_end, &cur, "\\")
+    || (htab(sp, s_end, &cur)
+    && space(sp, s_end, &cur)
+    && vchar(sp, s_end, &cur)
+    && obs_text(sp, s_end, &cur))) {
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2393,10 +1415,9 @@ quoted_pair(char **sp, char *s_end, Node ***n)
 int
 quoted_string(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "quoted-string", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
@@ -2416,115 +1437,10 @@ quoted_string(char **sp, char *s_end, Node ***n)
             return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-rank(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-received_by(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-received_protocol(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-t_codings(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-t_ranking(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2533,28 +1449,27 @@ t_ranking(char **sp, char *s_end, Node ***n)
 int
 tchar(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-    if (exclamation_s(sp, s_end, &cur)
-    && hash_s(sp, s_end, &cur)
-    && dollar_s(sp, s_end, &cur)
-    && percent_s(sp, s_end, &cur)
-    && ampersand_s(sp, s_end, &cur)
-    && quote_s(sp, s_end, &cur)
-    && asterisk_s(sp, s_end, &cur)
-    && plus_s(sp, s_end, &cur)
-    && minus_s(sp, s_end, &cur)
-    && period_s(sp, s_end, &cur)
-    && caret_s(sp, s_end, &cur)
-    && underscore_s(sp, s_end, &cur)
-    && backtick_s(sp, s_end, &cur)
-    && vbar_s(sp, s_end, &cur)
-    && tilde_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "!")
+    && string(sp, s_end, &cur, "#")
+    && string(sp, s_end, &cur, "$")
+    && string(sp, s_end, &cur, "%")
+    && string(sp, s_end, &cur, "&")
+    && string(sp, s_end, &cur, "'")
+    && string(sp, s_end, &cur, "*")
+    && string(sp, s_end, &cur, "+")
+    && string(sp, s_end, &cur, "-")
+    && string(sp, s_end, &cur, ".")
+    && string(sp, s_end, &cur, "^")
+    && string(sp, s_end, &cur, "_")
+    && string(sp, s_end, &cur, "`")
+    && string(sp, s_end, &cur, "|")
+    && string(sp, s_end, &cur, "~")
     && digit(sp, s_end, &cur)
     && alpha(sp, s_end, &cur)) {
         freeTree(**n);
@@ -2562,10 +1477,10 @@ tchar(char **sp, char *s_end, Node ***n)
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2574,7 +1489,7 @@ tchar(char **sp, char *s_end, Node ***n)
 int
 token(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
     int i;
 
@@ -2582,6 +1497,7 @@ token(char **sp, char *s_end, Node ***n)
         
     cur = &((**n)->child);
 
+    p = *sp;
     while (1) {
         if (tchar(sp, s_end, &cur)) {
             break;
@@ -2589,36 +1505,16 @@ token(char **sp, char *s_end, Node ***n)
         i++;
     }
     if (i < 1){
+        *sp = p;
         freeTree(**n);
         **n = NULL;
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-trailer_part(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2627,27 +1523,26 @@ trailer_part(char **sp, char *s_end, Node ***n)
 int
 transfer_coding(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-    if (chunked_s(sp, s_end, &cur)
-    && compress_s(sp, s_end, &cur)
-    && deflate_s(sp, s_end, &cur)
-    && gzip_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "chunked")
+    && string(sp, s_end, &cur, "compress")
+    && string(sp, s_end, &cur, "deflate")
+    && string(sp, s_end, &cur, "gzip")
     && transfer_extension(sp, s_end, &cur)) {
         freeTree(**n);
         **n = NULL;
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2656,10 +1551,10 @@ transfer_coding(char **sp, char *s_end, Node ***n)
 int
 transfer_extension(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "transfer-extension", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
@@ -2671,7 +1566,7 @@ transfer_extension(char **sp, char *s_end, Node ***n)
     while (1) {
         p = *sp;
         if (ows(sp, s_end, &cur)
-        || semicolon_s(sp, s_end, &cur)
+        || string(sp, s_end, &cur, ";")
         || ows(sp, s_end, &cur)
         || transfer_parameter(sp, s_end, &cur)) {
             *sp = p;
@@ -2679,10 +1574,10 @@ transfer_extension(char **sp, char *s_end, Node ***n)
         }
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2691,218 +1586,29 @@ transfer_extension(char **sp, char *s_end, Node ***n)
 int
 transfer_parameter(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "transfer-parameter", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
     p = *sp;
     if (token(sp, s_end, &cur)
     || bws(sp, s_end, &cur)
-    || equals_s(sp, s_end, &cur)
+    || string(sp, s_end, &cur, "=")
     || bws(sp, s_end, &cur)
-    || token(sp, s_end, &cur) && quoted_string(sp, s_end, &cur)) {
+    || (token(sp, s_end, &cur) && quoted_string(sp, s_end, &cur))) {
         *sp = p;
         freeTree(**n);
         **n = NULL;
         return 1;
     }
     
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-uri_host(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_charset(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_encoding(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_language(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-allow(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-content_encoding(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-content_language(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-content_location(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2911,7 +1617,7 @@ content_location(char **sp, char *s_end, Node ***n)
 int
 content_type(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
 
     createnode(*n, "Content-Type", *sp, 0, NULL, NULL);
         
@@ -2923,31 +1629,10 @@ content_type(char **sp, char *s_end, Node ***n)
             return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -2956,544 +1641,22 @@ date(char **sp, char *s_end, Node ***n)
 int
 expect(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (string(sp, s_end, &cur, "100-continue")) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-gmt(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-http_date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-imf_fixdate(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-location(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-max_forwards(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-referer(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-retry_after(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-server(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-user_agent(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-vary(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_ext(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_params(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-asctime_date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-charset(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-codings(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-content_coding(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-date1(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-date2(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-date3(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-day(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-day_name(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-day_name_l(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-delay_seconds(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-hour(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-media_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -3502,7 +1665,7 @@ media_range(char **sp, char *s_end, Node ***n)
 int
 media_type(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p1, *p2;
 
     createnode(*n, "media-type", *sp, 0, NULL, NULL);
@@ -3511,7 +1674,7 @@ media_type(char **sp, char *s_end, Node ***n)
 
     p1 = *sp;
     if (type(sp, s_end, &cur)
-    || slash_s(sp, s_end, &cur)
+    || string(sp, s_end, &cur, "/")
     || subtype(sp, s_end, &cur)) {
         *sp = p1;
         freeTree(**n);
@@ -3521,7 +1684,7 @@ media_type(char **sp, char *s_end, Node ***n)
     while (1){
         p2 = *sp;
         if (ows(sp, s_end, &cur)
-        || semicolon_s(sp, s_end, &cur)
+        || string(sp, s_end, &cur, ";")
         || ows(sp, s_end, &cur)
         || parameter(sp, s_end, &cur)){
             *sp = p2;
@@ -3529,73 +1692,10 @@ media_type(char **sp, char *s_end, Node ***n)
         }
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-minute(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-month(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-obs_date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -3604,124 +1704,27 @@ obs_date(char **sp, char *s_end, Node ***n)
 int
 parameter(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    p = *sp;
+    if (token(sp, s_end, &cur)
+    || string(sp, s_end, &cur, "=")
+    || (token(sp, s_end, &cur) && quoted_string(sp, s_end, &cur))) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-product(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-product_version(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-qvalue(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-rfc850_date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-second(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -3730,40 +1733,22 @@ second(char **sp, char *s_end, Node ***n)
 int
 subtype(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (token(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-time_of_day(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -3772,1258 +1757,22 @@ time_of_day(char **sp, char *s_end, Node ***n)
 int
 type(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    if (token(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-weight(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-year(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-etag(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_match(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_modified_since(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_none_match(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_unmodified_since(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-last_modified(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-entity_tag(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-etagc(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-opaque_tag(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-weak(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_ranges(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-content_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-acceptable_ranges(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_content_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_range_resp(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_range_set(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_range_spec(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-byte_ranges_specifier(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-bytes_unit(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-complete_length(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-first_byte_pos(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-last_byte_pos(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-other_content_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-other_range_resp(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-other_range_set(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-other_range_unit(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-other_ranges_specifier(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-range_unit(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-suffix_byte_range_spec(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-suffix_length(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-unsatisfied_range(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-age(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-cache_control(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-expires(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-pragma(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warning(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-cache_directive(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-delta_seconds(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-extension_pragma(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-pragma_directive(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warn_agent(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warn_code(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warn_date(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warn_text(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warning_value(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-proxy_authenticate(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-proxy_authorization(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-www_authenticate(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-auth_param(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-auth_scheme(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-challenge(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-credentials(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-authorization(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-token68(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5032,14 +1781,15 @@ token68(char **sp, char *s_end, Node ***n)
 int
 connection_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "Connection-header", *sp, 0, NULL, NULL);
+    cur = &((**n)->child);
 
     p = *sp;
-    if (connection_s(sp, s_end, &cur)
-    || colon_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "Connection")
+    || string(sp, s_end, &cur, ":")
     || ows(sp, s_end, &cur)
     || connection(sp, s_end, &cur)
     || ows(sp, s_end, &cur)) {
@@ -5048,10 +1798,11 @@ connection_header(char **sp, char *s_end, Node ***n)
         **n = NULL;
         return 1;
     }
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5060,7 +1811,7 @@ connection_header(char **sp, char *s_end, Node ***n)
 int
 content_length_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "Content-Length-header", *sp, 0, NULL, NULL);
@@ -5068,18 +1819,21 @@ content_length_header(char **sp, char *s_end, Node ***n)
     cur = &((**n)->child);
 
     p = *sp;
-    if (connection_s(sp, s_end, &cur)
-    || colon_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "Content-Length")
+    || string(sp, s_end, &cur, ":")
     || ows(sp, s_end, &cur)
-    || connection(sp, s_end, &cur)
+    || content_length(sp, s_end, &cur)
     || ows(sp, s_end, &cur)) {
         *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5088,7 +1842,7 @@ content_length_header(char **sp, char *s_end, Node ***n)
 int
 content_type_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "Content-Type-header", *sp, 0, NULL, NULL);
@@ -5096,39 +1850,21 @@ content_type_header(char **sp, char *s_end, Node ***n)
     cur = &((**n)->child);
 
     p = *sp;
-    if (connection_s(sp, s_end, &cur)
-    || colon_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "Content-Type")
+    || string(sp, s_end, &cur, ":")
     || ows(sp, s_end, &cur)
     || content_type(sp, s_end, &cur)
     || ows(sp, s_end, &cur)) {
         *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-trailer_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5137,16 +1873,16 @@ trailer_header(char **sp, char *s_end, Node ***n)
 int
 transfer_encoding_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Transfer-Encoding-header", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
     p = *sp;
-    if (transfer_encoding_s(sp, s_end, &cur)
-    || colon_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "Transfer-Encoding")
+    || string(sp, s_end, &cur, ":")
     || ows(sp, s_end, &cur)
     || transfer_encoding(sp, s_end, &cur)
     || ows(sp, s_end, &cur)) {
@@ -5156,220 +1892,10 @@ transfer_encoding_header(char **sp, char *s_end, Node ***n)
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-upgrade_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-via_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-age_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-expires_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-date_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-location_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-retry_after_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-vary_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-warning_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-cache_control_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5378,19 +1904,29 @@ cache_control_header(char **sp, char *s_end, Node ***n)
 int
 expect_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Expect-header", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
+    p = *sp;
+    if (string(sp, s_end, &cur, "Expect")
+    || string(sp, s_end, &cur, ":")
+    || ows(sp, s_end, &cur)
+    || expect(sp, s_end, &cur)
+    || ows(sp, s_end, &cur)) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
+    }
 
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5399,376 +1935,29 @@ expect_header(char **sp, char *s_end, Node ***n)
 int
 host_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
+    createnode(*n, "Host-header", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    p = *sp;
+    if (string(sp, s_end, &cur, "Host")
+    || string(sp, s_end, &cur, ":")
+    || ows(sp, s_end, &cur)
+    || host(sp, s_end, &cur)
+    || ows(sp, s_end, &cur)) {
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
-    *n = &((**n)->sibling);
-    return 0;
-}
 
-int
-max_forwards_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
     cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-pragma_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-range_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-te_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_match_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_none_match_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_modified_since_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_unmodified_since_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-if_range_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_charset_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_encoding_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-accept_language_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-authorization_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-proxy_authorization_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-referer_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
-    }
-    *n = &((**n)->sibling);
-    return 0;
-}
-
-int
-user_agent_header(char **sp, char *s_end, Node ***n)
-{
-    Node *cur;
-    char *p;
-
-    createnode(*n, "rulename", *sp, 0, NULL, NULL);
-        
-    cur = &((**n)->child);
-
-
-
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5777,7 +1966,7 @@ user_agent_header(char **sp, char *s_end, Node ***n)
 int
 cookie_pair(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "cookie-pair", *sp, 0, NULL, NULL);
@@ -5786,7 +1975,7 @@ cookie_pair(char **sp, char *s_end, Node ***n)
 
     p = *sp;
     if (cookie_name(sp, s_end, &cur)
-    || equals_s(sp, s_end, &cur)
+    || string(sp, s_end, &cur, "=")
     || cookie_value(sp, s_end, &cur)) {
         *sp = p;
         freeTree(**n);
@@ -5794,10 +1983,10 @@ cookie_pair(char **sp, char *s_end, Node ***n)
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5806,8 +1995,7 @@ cookie_pair(char **sp, char *s_end, Node ***n)
 int
 cookie_name(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
-    char *p;
+    Node **cur;
 
     createnode(*n, "cookie-name", *sp, 0, NULL, NULL);
         
@@ -5819,10 +2007,10 @@ cookie_name(char **sp, char *s_end, Node ***n)
             return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5831,7 +2019,7 @@ cookie_name(char **sp, char *s_end, Node ***n)
 int
 cookie_value(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "cookie-value", *sp, 0, NULL, NULL);
@@ -5859,10 +2047,10 @@ cookie_value(char **sp, char *s_end, Node ***n)
         }
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5874,10 +2062,10 @@ cookie_octet(char **sp, char *s_end, Node ***n)
     if (s_end - *sp + 1 < 1)
         return 1;
     if (**sp == 0x21
-    || **sp >= 0x23 && **sp <= 0x2B
-    || **sp >= 0x2D && **sp <= 0x3A
-    || **sp >= 0x3C && **sp <= 0x5B
-    || **sp >= 0x5D && **sp <= 0x7E) {
+    || (**sp >= 0x23 && **sp <= 0x2B)
+    || (**sp >= 0x2D && **sp <= 0x3A)
+    || (**sp >= 0x3C && **sp <= 0x5B)
+    || (**sp >= 0x5D && **sp <= 0x7E)) {
         createnode(*n, "cookie-octet", *sp, 1, NULL, NULL);
         *n = &((**n)->sibling);
         (*sp)++;
@@ -5889,7 +2077,7 @@ cookie_octet(char **sp, char *s_end, Node ***n)
 int
 cookie_header(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "Cookie-header", *sp, 0, NULL, NULL);
@@ -5897,7 +2085,7 @@ cookie_header(char **sp, char *s_end, Node ***n)
     cur = &((**n)->child);
 
     p = *sp;
-    if (cookie_s(sp, s_end, &cur)
+    if (string(sp, s_end, &cur, "Cookie")
     || ows(sp, s_end, &cur)
     || cookie_string(sp, s_end, &cur)
     || ows(sp, s_end, &cur)) {
@@ -5907,10 +2095,10 @@ cookie_header(char **sp, char *s_end, Node ***n)
         return 1;
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5919,7 +2107,7 @@ cookie_header(char **sp, char *s_end, Node ***n)
 int
 cookie_string(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p1, *p2;
 
     createnode(*n, "cookie-string", *sp, 0, NULL, NULL);
@@ -5935,7 +2123,7 @@ cookie_string(char **sp, char *s_end, Node ***n)
     }
     while (1) {
         p2 = *sp;
-        if (semicolon_s(sp, s_end, &cur)
+        if (string(sp, s_end, &cur, ";")
         || space(sp, s_end, &cur)
         || cookie_pair(sp, s_end, &cur)) {
             *sp = p2;
@@ -5943,10 +2131,10 @@ cookie_string(char **sp, char *s_end, Node ***n)
         }
     }
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -5955,7 +2143,7 @@ cookie_string(char **sp, char *s_end, Node ***n)
 int
 header_field(char **sp, char *s_end, Node ***n)
 {
-    Node *cur;
+    Node **cur;
     char *p;
 
     createnode(*n, "header-field", *sp, 0, NULL, NULL);
@@ -5971,7 +2159,7 @@ header_field(char **sp, char *s_end, Node ***n)
     && host_header(sp, s_end, &cur)) {
         p = *sp;
         if (field_name(sp, s_end, &cur)
-        || colon_s(sp, s_end, &cur)
+        || string(sp, s_end, &cur, ":")
         || ows(sp, s_end, &cur)
         || field_value(sp, s_end, &cur)
         || ows(sp, s_end, &cur)) {
@@ -5990,7 +2178,7 @@ int
 space(char **sp, char *s_end, Node ***n)
 {
     int i;
-    const char *s;
+    char *s;
 
     s = " ";
 
@@ -6049,12 +2237,12 @@ dquote(char **sp, char *s_end, Node ***n)
 }
 
 int
-connection_s(char **sp, char *s_end, Node ***n)
+htab(char **sp, char *s_end, Node ***n)
 {
     int i;
     const char *s;
 
-    s = "Connection";
+    s = "\t";
 
     if (s_end - *sp + 1 < strlen(s))
         return 1;
@@ -6062,478 +2250,63 @@ connection_s(char **sp, char *s_end, Node ***n)
         if (tolower(s[i]) != tolower((*sp)[i]))
             return 1;
     }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
+    createnode(*n, "HTAB", *sp, strlen(s), NULL, NULL);
     *n = &((**n)->sibling);
     *sp += strlen(s);
     return 0;
 }
 
 int
-colon_s(char **sp, char *s_end, Node ***n)
+vchar(char **sp, char *s_end, Node ***n)
 {
-    int i;
-    const char *s;
-
-    s = ":";
-
-    if (s_end - *sp + 1 < strlen(s))
+    if (s_end - *sp + 1 < 1)
         return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
+    if (**sp >= 0x21 && **sp <= 0x7E) {
+        createnode(*n, "VCHAR", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
     }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
+    return 1;
 }
 
 int
-cookie_s(char **sp, char *s_end, Node ***n)
+hexdig(char **sp, char *s_end, Node ***n)
 {
-    int i;
-    const char *s;
-
-    s = "Cookie:";
-
-    if (s_end - *sp + 1 < strlen(s))
+    if (s_end - *sp + 1 < 1)
         return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
+    if ((**sp >= 0x30 && **sp <= 0x39)
+    || (**sp >= 'A' && **sp <= 'F')
+    || (**sp >= 'a' && **sp <= 'f')) {
+        createnode(*n, "HEXDIG", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
     }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
+    return 1;
 }
 
 int
-semicolon_s(char **sp, char *s_end, Node ***n)
+octet(char **sp, char *s_end, Node ***n)
 {
-    int i;
-    const char *s;
+  if(s_end - *sp + 1 < 1)
+    return 1;
+  if(**sp >= 0x00 && **sp<= 0xFF ){
+      createnode(*n, "octet", *sp, 1, NULL, NULL);
+      *n = &((**n)->sibling);
+      (*sp)++;
+      return 0;
 
-    s = ";";
+  }
 
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
+  return 1;
 }
 
-int
-exclamation_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "!";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-int
-hash_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "#";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
 
 int
-dollar_s(char **sp, char *s_end, Node ***n)
+string(char **sp, char *s_end, Node ***n, char *s)
 {
     int i;
-    const char *s;
-
-    s = "$";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-percent_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "%";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-ampersand_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "&";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-quote_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "\'";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-asterisk_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "*";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-plus_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "+";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-minus_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "-";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-period_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = ".";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-caret_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "^";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-underscore_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "_";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-backtick_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "`";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-vbar_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "|";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-tilde_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "~";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-equals_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "=";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-transfer_encoding_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "Transfer-Encoding";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-chunked_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "chunked";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-compress_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "compress";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-deflate_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "deflate";
-
-    if (s_end - *sp + 1 < strlen(s))
-        return 1;
-    for (i = 0; i < strlen(s); i++){
-        if (tolower(s[i]) != tolower((*sp)[i]))
-            return 1;
-    }
-    createnode(*n, s, *sp, strlen(s), NULL, NULL);
-    *n = &((**n)->sibling);
-    *sp += strlen(s);
-    return 0;
-}
-
-int
-gzip_s(char **sp, char *s_end, Node ***n)
-{
-    int i;
-    const char *s;
-
-    s = "gzip";
 
     if (s_end - *sp + 1 < strlen(s))
         return 1;

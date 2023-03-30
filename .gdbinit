@@ -3,8 +3,8 @@ lay n
 lay n
 lay n
 lay n
-break message
-run tests/testFile/test0.txt mot
+break http_message
+run ./test0.txt
 
 define printTree 
     p *root

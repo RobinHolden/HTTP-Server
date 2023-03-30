@@ -17,11 +17,25 @@
     return 0;
 
 `*(rulename)`
+    while (1) {
+        if (rulename(sp, s_end, &cur)) {
+            break;
+        }
+    }
+
+`n*rulename`
 
     while (1) {
         if (rulename(sp, s_end, &cur)) {
             break;
         }
+        i++;
+    }
+    if (i < n){
+        *sp = p;
+        freeTree(**n);
+        **n = NULL;
+        return 1;
     }
 
 `*(rulename1 rulename 2)`
@@ -72,6 +86,20 @@
     if (rulename1(sp, s_end, &cur)
     || rulename2(sp, s_end, &cur))
         *sp = p1;
+
+`rulename1 rulename2 / rulename3 rulename4`
+    p = *sp;
+    if (rulename1(sp, s_end, &cur)
+    || rulename2(sp, s_end, &cur)){
+        *sp = p;
+        if (rulename3(sp, s_end, &cur)
+        || rulename4(sp, s_end, &cur)){
+            *sp = p;
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+        }
+    }
 
 `rulename1 /rulename2 / charset`
     if (rulename1(sp, s_end, &cur)
@@ -125,4 +153,4 @@ string_s(char **sp, char *s_end, Node ***n)
 }
 
 `cur`
-cur : host
+cur : media-type
