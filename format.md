@@ -34,6 +34,13 @@
         }
     }
 
+`*(rulename1 / rulename 2)`
+    while (1) {
+        if (rulename1(sp, s_end, &cur)
+        && rulename2(sp, s_end, &cur))
+            break;
+    }
+
 `rulename`
     if (rulename(sp, s_end, &cur)) {
             freeTree(**n);

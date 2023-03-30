@@ -2388,7 +2388,19 @@ quoted_string(char **sp, char *s_end, Node ***n)
         
     cur = &((**n)->child);
 
-
+    if (dquote(sp, s_end, &cur)) {
+            freeTree(**n);
+            **n = NULL;
+            return 1;
+    }
+    while (1) {
+        p = *sp;
+        if (rulename1(sp, s_end, &cur)
+        || rulename2(sp, s_end, &cur)) {
+            *sp = p;
+            break;
+        }
+    }
 
     cur = (**n)->child;
     while (cur) {
