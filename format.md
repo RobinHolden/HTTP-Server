@@ -48,7 +48,7 @@
             return 1;
     }
 
-`(rulename1 rulename2)`
+`rulename1 rulename2`
 
     p = *sp;
     if (rulename1(sp, s_end, &cur)
@@ -76,7 +76,8 @@
 `rulename1 /rulename2 / charset`
     if (rulename1(sp, s_end, &cur)
     && rulename2(sp, s_end, &cur)) {
-        if (s_end - *sp + 1 < 1 || **sp < charset_start || **sp > charset_end){
+        if (s_end - *sp + 1 < 1
+        || **sp < charset_start || **sp > charset_end){
             freeTree(**n);
             **n = NULL;
             return 1;
@@ -86,6 +87,21 @@
         (*sp)++;
         return 0;
     }
+
+`charset`
+int
+rulename(char **sp, char *s_end, Node ***n)
+{
+    if (s_end - *sp + 1 < 1)
+        return 1;
+    if (**sp >= charset_start && **sp <= charset_end) {
+        createnode(*n, "rulename", *sp, 1, NULL, NULL);
+        *n = &((**n)->sibling);
+        (*sp)++;
+        return 0;
+    }
+    return 1;
+}
 
 `"string"`
 int
@@ -109,4 +125,4 @@ string_s(char **sp, char *s_end, Node ***n)
 }
 
 `cur`
-cur : quoted_string
+cur : host
