@@ -3,8 +3,6 @@
 
 #include "tree.h"
 
-int cat(int (*f1)(char **, char *, Node ***), int (*f2)(char **, char *, Node ***),char **sp, char *s_end, Node ***cur);
-
 int http_message(char **sp, char *s_end);
 
 int http_name(char **sp, char *s_end, Node ***n);
@@ -193,7 +191,6 @@ int weak(char **sp, char *s_end, Node ***n);
 int accept_ranges(char **sp, char *s_end, Node ***n);
 int content_range(char **sp, char *s_end, Node ***n);
 int if_range(char **sp, char *s_end, Node ***n);
-int range(char **sp, char *s_end, Node ***n);
 int acceptable_ranges(char **sp, char *s_end, Node ***n);
 int byte_content_range(char **sp, char *s_end, Node ***n);
 int byte_range(char **sp, char *s_end, Node ***n);
@@ -290,5 +287,6 @@ int vchar(char **sp, char *s_end, Node ***n);
 int hexdig(char **sp, char *s_end, Node ***n);
 int octet(char **sp, char *s_end, Node ***n);
 int string(char **sp, char *s_end, Node ***n, char *s);
+int range(char **sp, char *s_end, Node ***n, unsigned char inf, unsigned char sup);
 
 #endif

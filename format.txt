@@ -1,17 +1,16 @@
 `start`
-    Node *cur;
+    Node **cur;
     char *p;
-
     createnode(*n, "rulename", *sp, 0, NULL, NULL);
         
     cur = &((**n)->child);
 
 
 
-    cur = (**n)->child;
-    while (cur) {
-        (**n)->len += cur->len;
-        cur = cur->sibling;
+    cur = &((**n)->child);
+    while (*cur) {
+        (**n)->len += (*cur)->len;
+        cur = &((*cur)->sibling);
     }
     *n = &((**n)->sibling);
     return 0;
@@ -24,8 +23,9 @@
     }
 
 `n*rulename`
-
+    i = 0;
     while (1) {
+        p = *sp;
         if (rulename(sp, s_end, &cur)) {
             break;
         }

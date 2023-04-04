@@ -4,7 +4,7 @@ lay n
 lay n
 lay n
 break http_message
-run ./test0.txt
+run fuzzer/testFile/test9927.txt
 
 define printTree 
     p *root
@@ -15,5 +15,4 @@ define printTree
     end
 end
 
-set trace-commands on
 set logging on
