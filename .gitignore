@@ -1,7 +1,4 @@
 .gdbinit
 gdb.txt
 http-server
-tmp.out
-createprotos.sh
-createfuncs.sh
 .vscode
