@@ -1,3 +1,6 @@
+#ifndef _HTTPPARSER_H_
+#define _HTTPPARSER_H_
+
 void *httpgetRootTree(); 
 
 typedef struct node {
@@ -9,3 +12,4 @@ typedef struct node {
 	struct node *link;
 } Lnode ;
 
+#endif

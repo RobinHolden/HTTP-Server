@@ -13,15 +13,18 @@
 #include "httpparser.h" // this will declare internal type used by the parser
 #include "api.h"
 
-#define ERROR "HTTP/1.0 400 SUCKA\r\n\r\n"
-#define REPONSE "HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nHey Bro why did you send me this:\r\n"
+static const char * const status[] = {
+	[200] = "HTTP/1.0 200 OK\r\n\r\n",
+	[400] = "HTTP/1.0 400 Bad Request\r\n\r\n",
+	[501] = "HTTP/1.0 501 Not Implemented\r\n\r\n"
+};
 
 int main(int argc, char *argv[])
 {
 	message *request;
-	int res;
+	int code;
 	_Token *r, *tok;
-	Lnode *root;
+	Lnode *root, *node;
 
 	while (1) {
 		// On attend la reception d'une requete HTTP, request pointera vers une ressource allouée par librequest.
@@ -33,15 +36,17 @@ int main(int argc, char *argv[])
 		printf("Client [%d] [%s:%d]\n", request->clientId, inet_ntoa(request->clientAddress->sin_addr), htons(request->clientAddress->sin_port));
 		printf("Contenu de la demande %.*s\n\n", request->len, request->buf);
 
-		if (res = parseur(request->buf, request->len)) {
+		if (parseur(request->buf, request->len)) {
 			root = getRootTree();
-			
-
-			
+			if ((code = semantics(root)) == 0) {
+				;// GOOD
+			} else {
+				writeDirectClient(request->clientId, status[code], strlen(status[code]));
+			}
 			// purgeElement(&r);
 			purgeTree(root);
 		} else {
-			writeDirectClient(request->clientId, ERROR, strlen(ERROR));
+			writeDirectClient(request->clientId, status[400], strlen(status[400]));
 		}
 		endWriteDirectClient(request->clientId);
 		requestShutdownSocket(request->clientId);
