@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "httpparser.h"
 #include "api.h"
@@ -24,7 +25,7 @@ char *const connections[] = {
 };
 
 Request *
-semantics(Lnode *root)
+semantics(_Token *root)
 {
     _Token *tok;
     Lnode *method, *target, *version, *connection, *coding, *length1, *length2;
@@ -34,33 +35,48 @@ semantics(Lnode *root)
 	req = emalloc(sizeof(Request));
 
 	/* Traitement champ "method" */
+	printf("Method\n");
 	if ((tok = searchTree(root, "method")) == NULL) {
 		req->status = 400;
 		return req;
 	}
+	printf("1\n");
+	printf("%p\n",tok->node);
 	method = (Lnode *)tok->node;
+	printf("2\n");
+	printf("%p\n",method);
+	printf("%p\n", method->value);
 	if (!strncmp(method->value, methods[GET], method->len)) {
+		printf("21\n");
 		req->method = GET;
+		printf("22\n");
 	} else if (!strncmp(method->value, methods[HEAD], method->len)){
+		printf("23\n");
 		req->method = HEAD;
 	} else {
+		printf("24\n");
         req->status = 501;
 		return req;
 	}
+	printf("3\n");
 	purgeElement(&tok);
+	printf("4\n");
 
 	/* Traitement champ "Request-target" */
-	if ((tok = searchTree(root, "request_target")) == NULL) {
+	printf("request-target\n");
+	if ((tok = searchTree(root, "absolute_path")) == NULL) {
 		req->status = 400;
 		return req;
 	}
 	target = (Lnode *)tok->node;
 	pct_normalize(target);
 	remove_dot_segments(target);
-	req->target = target;
+	strncpy(req->target, target->value + 1, target->len);
+	req->target[target->len - 1] = '\0';
 	purgeElement(&tok);
 
 	/* Traitement champ "HTTP-version" */
+	printf("Version\n");
 	if ((tok = searchTree(root, "HTTP_version")) == NULL) {
 		req->status = 400;
 		return req;
@@ -71,48 +87,55 @@ semantics(Lnode *root)
 	} else if (!strncmp(version->value, versions[HTTP1_1], version->len)) {
 		req->version = HTTP1_1;
 	} else {
-		return 505;
+		req->status = 505;
+		return req;
 	}
 	purgeElement(&tok);
 
 	/* Traitement champs d'en-tête */
 	/* Host */
-	if ((tok = searchTree(root, "Host_header")) == NULL && req->version == HTTP1_1
+	if (((tok = searchTree(root, "Host_header")) == NULL && req->version == HTTP1_1)
 	|| tok->next != NULL) {
-		return 400;
+		req->status = 400;
+		return req;
 	}
 	purgeElement(&tok);
 	/* Content-length */
-	if (tok = searchTree(root, "transfer_coding")) {
-		req->content_length = -1;
+	if ((tok = searchTree(root, "transfer_coding"))) {
+		req->content_length = NULL;
 		coding = (Lnode *)tok->node;
 		if (strncmp(coding->value, CHUNKED, coding->len)) {
-			return 400;
+			req->status = 400;
+			return req;
 		}
-		if (tok = searchTree(root, "Content_Length")) {
-			return 400;
+		if ((tok = searchTree(root, "Content_Length"))) {
+			req->status = 400;
+			return req;
 		}
+		purgeElement(&tok);
 	} else {
-		if (tok = searchTree(root, "Content_Length")) {
+		if ((tok = searchTree(root, "Content_Length"))) {
 			while (tok->next != NULL) {
 				length1 = (Lnode *)tok->node;
 				length2 = (Lnode *)tok->next->node;
 				if (length1->len != length2->len
 				|| strncmp(length1->value, length2->value, length1->len)) {
-					return 400;
+					req->status = 400;
+					return req;
 				}
 				tok = tok->next;
 			}
+			purgeElement(&tok);
 		}
-		/* Assigner valeur convertie dans request */
+		req->content_length = length1;
 	}
 	/* Connexion*/
-	if (tok = searchTree(root, "connection_option")) {
+	if ((tok = searchTree(root, "connection_option"))) {
 		do {
 			connection = (Lnode *)tok->node;
 			if (connection->len == strlen(connections[CLOSE])) {
 				for (i = 0; i < connection->len; i++) {
-					if (tolower(connection->value[i]) != connections[CLOSE])
+					if (tolower(connection->value[i]) != connections[CLOSE][i])
 						break;
 				}
 				if (i == connection->len) {
@@ -121,7 +144,7 @@ semantics(Lnode *root)
 				}
 			} else if (connection->len == strlen(connections[KEEP_ALIVE])) {
 				for (i = 0; i < connection->len; i++) {
-					if (tolower(connection->value[i]) != connections[KEEP_ALIVE])
+					if (tolower(connection->value[i]) != connections[KEEP_ALIVE][i])
 						break;
 				}
 				if (i == connection->len) {
@@ -132,6 +155,7 @@ semantics(Lnode *root)
 			tok = tok->next;
 		}
 		while (tok->next != NULL);
+		purgeElement(&tok);
 	}
 	if (req->connection != CLOSE && req->version == HTTP1_1) {
 		req->connection = KEEP_ALIVE;
@@ -139,7 +163,8 @@ semantics(Lnode *root)
 		if (req->connection != CLOSE && req->connection != KEEP_ALIVE) {
 		req->connection = CLOSE;
 	}
-	return 0;
+	req->status = 200;
+	return req;
 }
 
 void static

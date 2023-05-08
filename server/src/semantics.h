@@ -27,12 +27,12 @@ typedef struct request {
     int method;
     int version;
     int connection;
-    int content_length;
-    Lnode *target;
+    Lnode *content_length;
+    char *target;
     int status;
 } Request;
 
-Request *semantics(Lnode *root);
+Request *semantics(_Token *root);
 
 #endif
 
