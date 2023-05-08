@@ -13,6 +13,8 @@
 #include "httpparser.h" // this will declare internal type used by the parser
 #include "api.h"
 
+#include "semantics.h"
+
 static const char * const status[] = {
 	[200] = "HTTP/1.1 200 OK\r\n\r\n",
 	[400] = "HTTP/1.1 400 Bad Request\r\n\r\n",
@@ -23,9 +25,8 @@ static const char * const status[] = {
 int main(int argc, char *argv[])
 {
 	message *request;
-	int code;
-	_Token *r, *tok;
-	Lnode *root, *node;
+	Lnode *root;
+	Request *req;
 
 	while (1) {
 		// On attend la reception d'une requete HTTP, request pointera vers une ressource allouée par librequest.
@@ -39,12 +40,11 @@ int main(int argc, char *argv[])
 
 		if (parseur(request->buf, request->len)) {
 			root = getRootTree();
-			if ((code = semantics(root)) == 0) {
-				;// GOOD
-			} else {
-				writeDirectClient(request->clientId, status[code], strlen(status[code]));
+			req = semantics(root);
+			if (req->status != 0) {
+				writeDirectClient(request->clientId, status[req->status], strlen(status[req->status]));
 			}
-			// purgeElement(&r);
+			// writeDirectClient(request->clientId, status[code], strlen(status[code]));
 			purgeTree(root);
 		} else {
 			writeDirectClient(request->clientId, status[400], strlen(status[400]));
@@ -85,13 +85,6 @@ int main(int argc, char *argv[])
 
    6.  If this is a request message and none of the above are true, then
        the message body length is zero (no message body is present).
-*/
-
-/*
- Host: 
-	1.1 : obligatoire --> 400 sinon
-	1.0 --> pas obl
-	plusieurs host: --> 400
 */
 
 /* Connection 

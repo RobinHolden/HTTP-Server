@@ -3,54 +3,72 @@
 
 #include "httpparser.h"
 #include "api.h"
-
-#define GET "GET"
-#define HEAD "HEAD"
-#define POST "POST"
-
-#define HTTP1_0 "HTTP/1.0"
-#define HTTP1_1 "HTTP/1.1"
+#include "semantics.h"
+#include "util.h"
 
 void static pct_normalize(Lnode *node);
 int static pct_decode_char(char *s, int len, int i);
 void static remove_dot_segments(Lnode *node);
 
-int
+char * const methods[] = {
+	[GET] = "GET",
+	[HEAD] = "HEAD"
+};
+char *const versions[] = {
+	[HTTP1_0] = "HTTP/1.0",
+	[HTTP1_1] = "HTTP/1.1"
+};
+char *const connections[] = {
+	[KEEP_ALIVE] = "keep-alive",
+	[CLOSE] = "close"
+};
+
+Request *
 semantics(Lnode *root)
 {
     _Token *tok;
-    Lnode *method, *target, *version, *host, *connection;
-	int minor_version;
+    Lnode *method, *target, *version, *connection, *coding, *length1, *length2;
+	Request *req;
+	
+	req = emalloc(sizeof(Request));
 
 	/* Traitement champ "method" */
 	if ((tok = searchTree(root, "method")) == NULL) {
-		return 400;
+		req->status = 400;
+		return req;
 	}
 	method = (Lnode *)tok->node;
-	if (strncmp(method->value, GET, method->len)
-	&& strncmp(method->value, HEAD, method->len)) {
-        return 501;
+	if (!strncmp(method->value, methods[GET], method->len)) {
+		req->method = GET;
+	} else if (!strncmp(method->value, methods[HEAD], method->len)){
+		req->method = HEAD;
+	} else {
+        req->status = 501;
+		return req;
 	}
 	purgeElement(&tok);
 
 	/* Traitement champ "Request-target" */
-	if ((tok = searchTree(root, "Request_target")) == NULL) {
-		return 400;
+	if ((tok = searchTree(root, "request_target")) == NULL) {
+		req->status = 400;
+		return req;
 	}
 	target = (Lnode *)tok->node;
 	pct_normalize(target);
 	remove_dot_segments(target);
+	req->target = target;
 	purgeElement(&tok);
 
 	/* Traitement champ "HTTP-version" */
 	if ((tok = searchTree(root, "HTTP_version")) == NULL) {
-		return 400;
+		req->status = 400;
+		return req;
 	}
 	version = (Lnode *)tok->node;
-	if (!strncmp(version->value, HTTP1_0, version->len)) {
-		minor_version = 0;
-	} else if (!strncmp(version->value, HTTP1_1, version->len)) {
-		minor_version = 1;
+	if (!strncmp(version->value, versions[HTTP1_0], version->len)) {
+		req->version = HTTP1_0;
+	} else if (!strncmp(version->value, versions[HTTP1_1], version->len)) {
+		req->version = HTTP1_1;
 	} else {
 		return 505;
 	}
@@ -58,11 +76,35 @@ semantics(Lnode *root)
 
 	/* Traitement champs d'en-tête */
 	/* Host */
-	if ((tok = searchTree(root, "Host_header")) == NULL) {
-		 
+	if ((tok = searchTree(root, "Host_header")) == NULL && req->version == HTTP1_1
+	|| tok->next != NULL) {
+		return 400;
 	}
-	host = (Lnode *)tok->node;
-	
+	purgeElement(&tok);
+	/* Content-length */
+	if (tok = searchTree(root, "transfer_coding")) {
+		req->content_length = -1;
+		coding = (Lnode *)tok->node;
+		if (strncmp(coding->value, CHUNKED, coding->len)) {
+			return 400;
+		}
+		if (tok = searchTree(root, "Content_Length")) {
+			return 400;
+		}
+	} else {
+		if (tok = searchTree(root, "Content_Length")) {
+			while (tok->next != NULL) {
+				length1 = (Lnode *)tok->node;
+				length2 = (Lnode *)tok->next->node;
+				if (length1->len != length2->len
+				|| strncmp(length1->value, length2->value, length1->len)) {
+					return 400;
+				}
+				tok = tok->next;
+			}
+		}
+		/* Assigner valeur convertie dans request */
+	}
 	return 0;
 }
 
