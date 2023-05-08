@@ -8,8 +8,12 @@
 #define HEAD "HEAD"
 #define POST "POST"
 
+#define HTTP1_0 "HTTP/1.0"
+#define HTTP1_1 "HTTP/1.1"
+
 void static pct_normalize(Lnode *node);
 int static pct_decode_char(char *s, int len, int i);
+void static remove_dot_segments(Lnode *node);
 
 int
 semantics(Lnode *root)
@@ -18,20 +22,40 @@ semantics(Lnode *root)
     Lnode *node;
 
 	/* Traitement champ "method" */
-	tok = searchTree(root, "method");
+	if (tok = searchTree(root, "method") == NULL) {
+		return 400;
+	}
 	node = (Lnode *)tok->node;
 	if (strncmp(node->value, GET, strlen(GET))
-	&& strncmp(node->value, HEAD, strlen(HEAD))
-	&& strncmp(node->value, POST, strlen(POST))) {
+	&& strncmp(node->value, HEAD, strlen(HEAD))) {
         return 501;
 	}
+	purgeElement(&tok);
 	/* Traitement champ "Request-target" */
-	tok = searchTree(root, "Request_target");
+	if (tok = searchTree(root, "Request_target") == NULL) {
+		return 400;
+	}
 	node = (Lnode *)tok->node;
 	pct_normalize(node);
-
+	remove_dot_segments(node);
+	purgeElement(&tok);
 	/* Traitement champ "HTTP-version" */
+	if (tok = searchTree(root, "HTTP_version") == NULL) {
+		return 400;
+	}
+	node = (Lnode *)tok->node;
+	if (strncmp(node->value, HTTP1_0, strlen(HTTP1_0))
+	&& strncmp(node->value, HTTP1_1, strlen(HTTP1_1))) {
+		return 505;
+	}
+	purgeElement(&tok);
 	/* Traitement champs d'en-tête */
+	/* Host */
+	if (tok = searchTree(root, "Host_header") == NULL) {
+		
+	}
+	node = (Lnode *)tok->node;
+	return 0;
 }
 
 void static
@@ -46,10 +70,6 @@ pct_normalize(Lnode *node)
 				node->len -= 2;
 		}
 	}
-	/*
-	ALPHA: (%41-%5A and %61-%7A), DIGIT (%30-%39), hyphen (%2D), period (%2E),
-   underscore (%5F), or tilde (%7E)
-   */
 }
 
 int static
@@ -78,4 +98,86 @@ pct_decode_char(char *s, int len, int i)
 		}
 	}
 	return 0;
+}
+
+/* See RFC 3986 Section 5.2.4.*/
+void static
+remove_dot_segments(Lnode *node)
+{
+	int i, j;
+	char buf[node->len];
+	
+	buf[0] = '\0';
+	i = j = 0;
+	while (i < node->len) {
+		/* A */
+		if (i <= node->len - strlen("../")
+		&& node->value[i] == '.'
+		&& node->value[i + 1] == '.'
+		&& node->value[i + 2] == '/') {
+			i += strlen("../");
+		} else if (i <= node->len - strlen("./")
+		&& node->value[i] == '.'
+		&& node->value[i + 1] == '/') {
+			i += strlen("./");
+		/* B */
+		} else if (i <= node->len - strlen("/./")
+		&& node->value[i] == '/'
+		&& node->value[i + 1] == '.'
+		&& node->value[i + 2] == '/') {
+			i += strlen("/.");
+		} else if (i <= node->len - strlen("/.")
+		&& node->value[i] == '/'
+		&& node->value[i + 1] == '.'
+		&& i + 2 == node->len ) {
+			i += strlen("/");
+			node->value[i + 1] = '/';
+		/* C */
+		} else if (i <= node->len - strlen("/../")
+		&& node->value[i] == '/'
+		&& node->value[i + 1] == '.'
+		&& node->value[i + 2] == '.'
+		&& node->value[i + 3] == '/') {
+			i += strlen("/..");
+			if (j != 0) {
+				while (buf[j] != '/') {
+					j--;
+				}
+				j--;
+			}
+		} else if (i <= node->len - strlen("/..")
+		&& node->value[i] == '/'
+		&& node->value[i + 1] == '.'
+		&& node->value[i + 2] == '.'
+		&& i + 3 == node->len) {
+			i += strlen("/.");
+			node->value[i + 2] = '/';
+			if (j != 0) {
+				while (buf[j] != '/') {
+					j--;
+				}
+				j--;
+			}
+		/* D */
+		} else if ( i <= node->len - strlen(".")
+		&& node->value[i] == '.'
+		&& i + 1 == node->len){
+			i += strlen(".");
+		} else if (i <= node->len - strlen("..")
+		&& node->value[i] == '.'
+		&& node->value[i + 1] == '.'
+		&& i + 2 == node->len) {
+			i += strlen("..");
+		/* E */
+		} else {
+			do {
+				buf[j] = node->value[i];
+				j++;
+				i++;
+			} while (i < node->len && node->value[i] != '/');
+		}
+	}
+	/* Replace by interpreted string */
+	memmove(node->value, buf, j);
+	node->len = j;
 }
