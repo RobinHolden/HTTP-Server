@@ -29,6 +29,7 @@ semantics(Lnode *root)
     _Token *tok;
     Lnode *method, *target, *version, *connection, *coding, *length1, *length2;
 	Request *req;
+	int i;
 	
 	req = emalloc(sizeof(Request));
 
@@ -104,6 +105,39 @@ semantics(Lnode *root)
 			}
 		}
 		/* Assigner valeur convertie dans request */
+	}
+	/* Connexion*/
+	if (tok = searchTree(root, "connection_option")) {
+		do {
+			connection = (Lnode *)tok->node;
+			if (connection->len == strlen(connections[CLOSE])) {
+				for (i = 0; i < connection->len; i++) {
+					if (tolower(connection->value[i]) != connections[CLOSE])
+						break;
+				}
+				if (i == connection->len) {
+					req->connection = CLOSE;
+					break;
+				}
+			} else if (connection->len == strlen(connections[KEEP_ALIVE])) {
+				for (i = 0; i < connection->len; i++) {
+					if (tolower(connection->value[i]) != connections[KEEP_ALIVE])
+						break;
+				}
+				if (i == connection->len) {
+					req->connection = KEEP_ALIVE;
+					break;
+				}
+			}
+			tok = tok->next;
+		}
+		while (tok->next != NULL);
+	}
+	if (req->connection != CLOSE && req->version == HTTP1_1) {
+		req->connection = KEEP_ALIVE;
+	}
+		if (req->connection != CLOSE && req->connection != KEEP_ALIVE) {
+		req->connection = CLOSE;
 	}
 	return 0;
 }
