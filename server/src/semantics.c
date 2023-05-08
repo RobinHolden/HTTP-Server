@@ -18,43 +18,51 @@ void static remove_dot_segments(Lnode *node);
 int
 semantics(Lnode *root)
 {
-    _Token *r, *tok;
-    Lnode *node;
+    _Token *tok;
+    Lnode *method, *target, *version, *host, *connection;
+	int minor_version;
 
 	/* Traitement champ "method" */
-	if (tok = searchTree(root, "method") == NULL) {
+	if ((tok = searchTree(root, "method")) == NULL) {
 		return 400;
 	}
-	node = (Lnode *)tok->node;
-	if (strncmp(node->value, GET, strlen(GET))
-	&& strncmp(node->value, HEAD, strlen(HEAD))) {
+	method = (Lnode *)tok->node;
+	if (strncmp(method->value, GET, method->len)
+	&& strncmp(method->value, HEAD, method->len)) {
         return 501;
 	}
 	purgeElement(&tok);
+
 	/* Traitement champ "Request-target" */
-	if (tok = searchTree(root, "Request_target") == NULL) {
+	if ((tok = searchTree(root, "Request_target")) == NULL) {
 		return 400;
 	}
-	node = (Lnode *)tok->node;
-	pct_normalize(node);
-	remove_dot_segments(node);
+	target = (Lnode *)tok->node;
+	pct_normalize(target);
+	remove_dot_segments(target);
 	purgeElement(&tok);
+
 	/* Traitement champ "HTTP-version" */
-	if (tok = searchTree(root, "HTTP_version") == NULL) {
+	if ((tok = searchTree(root, "HTTP_version")) == NULL) {
 		return 400;
 	}
-	node = (Lnode *)tok->node;
-	if (strncmp(node->value, HTTP1_0, strlen(HTTP1_0))
-	&& strncmp(node->value, HTTP1_1, strlen(HTTP1_1))) {
+	version = (Lnode *)tok->node;
+	if (!strncmp(version->value, HTTP1_0, version->len)) {
+		minor_version = 0;
+	} else if (!strncmp(version->value, HTTP1_1, version->len)) {
+		minor_version = 1;
+	} else {
 		return 505;
 	}
 	purgeElement(&tok);
+
 	/* Traitement champs d'en-tête */
 	/* Host */
-	if (tok = searchTree(root, "Host_header") == NULL) {
-		
+	if ((tok = searchTree(root, "Host_header")) == NULL) {
+		 
 	}
-	node = (Lnode *)tok->node;
+	host = (Lnode *)tok->node;
+	
 	return 0;
 }
 
