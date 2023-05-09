@@ -2,7 +2,7 @@
 #define _HTTPPARSER_H_
 
 void *httpgetRootTree(); 
-
+/*
 typedef struct node {
 	int level;
 	char *name;
@@ -11,5 +11,5 @@ typedef struct node {
 	int explored;
 	struct node *link;
 } Lnode ;
-
+*/
 #endif

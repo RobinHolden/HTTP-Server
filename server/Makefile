@@ -8,8 +8,13 @@ $(MAIN): $(SRC_C)
 	gcc $^ -o $@ $(CFLAGS) $(IFLAGS) $(LFLAGS)
 
 run:
-	export LD_LIBRARY_PATH=./api/libparser:./api/librequest-0.5
+	export LD_LIBRARY_PATH=./api/libparser:./api/librequest-0.5 && \
 	./$(MAIN) &
+
+stop:
+	@echo "Stopping HTTP server..."
+	pkill http-server
+	@echo "Done"
 
 clean:
 	rm -rf $(MAIN) src/*~ src/*.swap

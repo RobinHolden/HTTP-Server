@@ -23,11 +23,16 @@ extern char * const connections[];
 
 #define CHUNKED "chunked"
 
+typedef struct node {
+	char *value;
+	int len;
+} Node;
+
 typedef struct request {
     int method;
     int version;
     int connection;
-    Lnode *content_length;
+    Node *content_length;
     char *target;
     int status;
 } Request;
