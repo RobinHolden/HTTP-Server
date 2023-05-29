@@ -37,7 +37,7 @@ typedef struct node {
 typedef struct request {
     int method;
     int version;
-    int host = -1;
+    int host;
     char *target;
     int connection;
     Node *content_length;

@@ -48,7 +48,6 @@ int main(int argc, char *argv[])
 	char *length;
 	char *target;
 	int i, j, k;
-	int host;
 
 	while (1) {
 		// On attend la reception d'une requete HTTP, request pointera vers une ressource allouée par librequest.
@@ -69,7 +68,7 @@ int main(int argc, char *argv[])
 			printf("Fetching requested resource...\n");
 			/* Open target file */
 			if (req->host == -1) {
-				host = SITE1_FR;
+				req->host = SITE1_FR;
 			}
 			if (req->target[0] == '\0') {
 				req->target = strdup(DFLT_TARG);
@@ -80,7 +79,11 @@ int main(int argc, char *argv[])
 			}
 			target[i++] = '/';
 			for (j = 0; j < strlen(hosts[req->host]); j++) {
-				target[i + j] = hosts[req->host][j];
+				if (hosts[req->host][j] == '.') {
+					target[i + j] = '_';
+				} else {
+					target[i + j] = hosts[req->host][j];
+				}
 			}
 			target[i + j] = '/';
 			j++;

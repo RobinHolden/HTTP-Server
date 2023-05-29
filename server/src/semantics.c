@@ -37,7 +37,7 @@ semantics(_Token *root)
 	
 	req = emalloc(sizeof(Request));
 
-	req->host = NULL;
+	req->host = -1;
 
 	/* Traitement champ "method" */
 	if ((tok = searchTree(root, "method")) == NULL) {
@@ -187,7 +187,6 @@ pct_normalize(Node *node)
 			/* Format string for strtol */
 			strncpy(buf, node->value + i + 1, 3);
 			node->value[i] = strtol(buf, NULL, 16);
-			if (pct_decode_char(node->value, node->len, i))
 			/* Copy rest of s to the left */
 			memmove(node->value + i + 1, node->value + i + 3, node->len - i - 3);
 			node->len -= 2;
@@ -200,7 +199,9 @@ void static
 remove_dot_segments(Node *node)
 {
 	int i, j;
-	char buf[node->len];
+	char *buf;
+	
+	buf = emalloc(node->len * sizeof(char));
 	
 	buf[0] = '\0';
 	i = j = 0;
@@ -272,5 +273,6 @@ remove_dot_segments(Node *node)
 	}
 	/* Replace by interpreted string */
 	memmove(node->value, buf, j);
+	free(buf);
 	node->len = j;
 }
