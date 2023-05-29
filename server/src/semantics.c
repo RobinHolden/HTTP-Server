@@ -8,7 +8,6 @@
 #include "util.h"
 
 void static pct_normalize(Node *node);
-int static pct_decode_char(char *s, int len, int i);
 void static remove_dot_segments(Node *node);
 
 char * const methods[] = {
@@ -23,16 +22,22 @@ char *const connections[] = {
 	[KEEP_ALIVE] = "keep-alive",
 	[CLOSE] = "close"
 };
+char * const hosts[] = {
+	[SITE1_FR] = "site1.fr",
+	[SITE2_FR] = "site2.fr"
+};
 
 Request *
 semantics(_Token *root)
 {
     _Token *tok;
-    Node method, target, version, connection, coding, length1, length2;
+    Node method, target, version, connection, coding, length1, length2, host;
 	Request *req;
 	int i;
 	
 	req = emalloc(sizeof(Request));
+
+	req->host = NULL;
 
 	/* Traitement champ "method" */
 	if ((tok = searchTree(root, "method")) == NULL) {
@@ -81,12 +86,24 @@ semantics(_Token *root)
 
 	/* Traitement champs d'en-tête */
 	/* Host */
-	if (((tok = searchTree(root, "Host_header")) == NULL && req->version == HTTP1_1)
+	if (((tok = searchTree(root, "host")) == NULL && req->version == HTTP1_1)
 	|| tok->next != NULL) {
 		req->status = 400;
 		return req;
 	}
 	purgeElement(&tok);
+
+	if ((tok = searchTree(root, "reg_name")) != NULL) {
+		host.value = getElementValue(tok->node, &host.len);
+		for (i = 0; i < N_HOSTS; i++) {
+			if (!strncmp(host.value, hosts[i], host.len)) {
+				req->host = i;
+				break;
+			}
+		}
+	}
+	purgeElement(&tok);
+	
 	/* Content-length */
 	if ((tok = searchTree(root, "transfer_coding"))) {
 		req->content_length = NULL;
@@ -115,6 +132,7 @@ semantics(_Token *root)
 			purgeElement(&tok);
 		}
 	}
+
 	/* Connexion*/
 	if ((tok = searchTree(root, "connection_option"))) {
 		do {
@@ -157,43 +175,24 @@ void static
 pct_normalize(Node *node)
 {
 	int i;
+	char buf[3];
+
+	buf[2] = '\0';
 
 	/* While room for pct-encoded */
 	for (i = 0; i + 2 < node->len; i++) {
-		if (node->value[i] == '%') {
+		if (node->value[i] == '%'
+		&& isxdigit(node->value[i + 1])
+		&& isxdigit(node->value[i + 2])) {
+			/* Format string for strtol */
+			strncpy(buf, node->value + i + 1, 3);
+			node->value[i] = strtol(buf, NULL, 16);
 			if (pct_decode_char(node->value, node->len, i))
-				node->len -= 2;
-		}
-	}
-}
-
-int static
-pct_decode_char(char *s, int len, int i)
-{
-	char pctencoded[4];
-
-	printf("Decoding percent-encoded character.\n");
-	if (isxdigit(s[i + 1]) && isxdigit(s[i + 2])) {
-		/* Format string for strtol */
-		strncpy(pctencoded, s + i, 3);
-		pctencoded[3] = '\0';
-		char decoded = strtol(pctencoded + 1, NULL, 16);
-		/* If unreserved character */
-		if ((decoded >= 0x41 && decoded <= 0x5A)
-		 || (decoded >= 0x61 && decoded <= 0x7A)
-		 || (decoded >= 0x30 && decoded <= 0x39)
-		  || decoded == 0x2D
-		  || decoded == 0x2E
-		  || decoded == 0x5F
-		  || decoded == 0x7E) {
 			/* Copy rest of s to the left */
-			memmove(s + i + 1, s + i + 3, len - i - 3);
-			/* Replace % by correct char */
-			s[i] = decoded;
-			return 1;
+			memmove(node->value + i + 1, node->value + i + 3, node->len - i - 3);
+			node->len -= 2;
 		}
 	}
-	return 0;
 }
 
 /* See RFC 3986 Section 5.2.4.*/

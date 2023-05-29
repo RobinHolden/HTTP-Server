@@ -23,6 +23,11 @@
 #include "util.h"
 
 #define PORT 8080
+#define CONNECTION "Connection: "
+#define CONTENT_LENGTH "Content-Length: "
+#define CRLF "\r\n"
+#define WWW "www"
+#define DFLT_TARG "index.html"
 
 char * const status[] = {
 	[200] = "HTTP/1.1 200 OK",
@@ -31,10 +36,6 @@ char * const status[] = {
 	[501] = "HTTP/1.1 501 Not Implemented",
 	[505] = "HTTP/1.1 505 HTTP Version Not Supported"
 };
-#define CONNECTION "Connection: "
-#define CONTENT_LENGTH "Content-Length: "
-#define CRLF "\r\n"
-#define WWW "www/"
 
 int main(int argc, char *argv[])
 {
@@ -46,7 +47,8 @@ int main(int argc, char *argv[])
 	char *body;
 	char *length;
 	char *target;
-	int i, j;
+	int i, j, k;
+	int host;
 
 	while (1) {
 		// On attend la reception d'une requete HTTP, request pointera vers une ressource allouée par librequest.
@@ -62,19 +64,28 @@ int main(int argc, char *argv[])
 			printf("Valid request syntax\n");
 			root = getRootTree();
 			req = semantics(root);
+			printf("Valid request semantics\n");
 
 			printf("Fetching requested resource...\n");
 			/* Open target file */
+			if (req->host == -1) {
+				host = SITE1_FR;
+			}
 			if (req->target[0] == '\0') {
-				target = "www/index.html";
-			} else {
-				target = emalloc(strlen(req->target) + strlen(WWW) + 1);
-				for (i = 0; i < strlen(WWW); i++) {
-					target[i] = WWW[i];
-				}
-				for (j = 0; j < strlen(req->target); j++) {
-					target[i + j] = req->target[j];
-				}
+				req->target = strdup(DFLT_TARG);
+			}
+			target = emalloc(strlen(WWW) + strlen("/") + strlen(hosts[req->host]) + strlen("/") + strlen(req->target) + 1);
+			for (i = 0; i < strlen(WWW); i++) {
+				target[i] = WWW[i];
+			}
+			target[i++] = '/';
+			for (j = 0; j < strlen(hosts[req->host]); j++) {
+				target[i + j] = hosts[req->host][j];
+			}
+			target[i + j] = '/';
+			j++;
+			for (k = 0; k < strlen(req->target); k++) {
+				target[i + j + k] = req->target[k];
 			}
 			if ((fi = open(target, O_RDWR)) == -1) {
 				req->status = 404;

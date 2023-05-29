@@ -1,8 +1,10 @@
-nav {
+nav
+{
   margin-bottom: 5%;
 }
 
-ul {
+nav ul
+{
   list-style-type: none;
   margin: 0;
   padding: 0;
@@ -14,22 +16,26 @@ ul {
   left: 0;
 }
 
-li {
+nav li
+{
   float: left;
 }
 
-li a,
-li a:visited {
+nav li a,
+nav li a:visited
+{
   display: block;
   color: #fff;
   text-decoration: none;
   padding: 10px 10px;
 }
 
-li a:hover:not(.active) {
+nav li a:hover:not(.active)
+{
   background-color: #000;
 }
 
-.active {
+nav .active
+{
   background-color: #4CAF50;
 }
