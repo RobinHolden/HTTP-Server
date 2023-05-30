@@ -1,9 +1,0 @@
-#list{
-  width: 10%;
-  margin:auto;
-}
-.listelem{
-  cursor: url("img/cursorbin.png"), default;
-  border-bottom: 2px solid gray;
-  margin-bottom: 10%;
-}
