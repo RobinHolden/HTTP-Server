@@ -7,11 +7,13 @@
 
 enum methods {
     GET,
-    HEAD
+    HEAD,
+    N_METHODS
 };
 enum versions {
     HTTP1_0,
-    HTTP1_1
+    HTTP1_1,
+    N_VERSIONS
 };
 enum hosts {
     SITE1_FR,
@@ -20,7 +22,8 @@ enum hosts {
 };
 enum connections {
     KEEP_ALIVE,
-    CLOSE
+    CLOSE,
+    N_CONNECTIONS
 };
 extern char * const methods[];
 extern char * const versions[];
@@ -40,12 +43,9 @@ typedef struct request {
     int host;
     char *target;
     int connection;
-    Node *content_length;
     int status;
 } Request;
 
 Request *semantics(_Token *root);
 
 #endif
-
-

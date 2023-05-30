@@ -96,7 +96,8 @@ int main(int argc, char *argv[])
 			for (k = 0; k < strlen(req->target); k++) {
 				target[i + j + k] = req->target[k];
 			}
-			printf("Fetching requested resource: %s\n", target);
+			target[i + j + k] = '\0';
+			//printf("Fetching requested resource: %s\n", target);
 			if ((fi = open(target, O_RDWR)) == -1) {
 				req->status = 404;
         	} else {
@@ -123,17 +124,18 @@ int main(int argc, char *argv[])
 				if (req->method == GET) {
 					printf("Answering GET request\n");
 					writeDirectClient(request->clientId, CONTENT_LENGTH, strlen(CONTENT_LENGTH));
-					length = emalloc((int)log10(st.st_size) + 1);
+					length = emalloc((int)log10(st.st_size) + 2);
 					sprintf(length, "%ld", st.st_size);
 					writeDirectClient(request->clientId, length, strlen(length));
 					writeDirectClient(request->clientId, CRLF, strlen(CRLF));
+					free(length);
 					/* Content-Type */
 					writeDirectClient(request->clientId, CONTENT_TYPE, strlen(CONTENT_TYPE));
 					if ((type = content_type(target)) != -1 && content_types[type][1][0] != '\0') {
-						printf("Content-Type: %s\n", content_types[type][1]);
+						//printf("Content-Type: %s\n", content_types[type][1]);
 						writeDirectClient(request->clientId, content_types[type][1], strlen(content_types[type][1]));
 					} else {
-						printf("Content-Type: %s\n", DEFAULT_TYPE);
+						//printf("Content-Type: %s\n", DEFAULT_TYPE);
 						writeDirectClient(request->clientId, DEFAULT_TYPE, strlen(DEFAULT_TYPE));
 					}
 					writeDirectClient(request->clientId, CRLF, strlen(CRLF));

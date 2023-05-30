@@ -7,8 +7,16 @@
 #include "semantics.h"
 #include "util.h"
 
-void static pct_normalize(Node *node);
-void static remove_dot_segments(Node *node);
+static void initreq(Request *req);
+static int method(Request *req, _Token *root);
+static int request_target(Request *req, _Token *root);
+static int http_version(Request *req, _Token *root);
+static int host(Request *req, _Token *root);
+static int content_length(Request *req, _Token *root);
+static int connection(Request *req, _Token *root);
+
+void static pct_normalize(char *target);
+void static remove_dot_segments(char *target);
 
 char * const methods[] = {
 	[GET] = "GET",
@@ -30,48 +38,87 @@ char * const hosts[] = {
 Request *
 semantics(_Token *root)
 {
-    _Token *tok;
-    Node method, target, version, connection, coding, length1, length2, host;
 	Request *req;
-	int i;
 
 	req = emalloc(sizeof(Request));
-
+	initreq(req);
 	req->host = -1;
 
-	/* Traitement champ "method" */
+	if (method(req, root)
+	|| request_target(req, root)
+	|| http_version(req, root)
+	|| host(req, root)
+	|| content_length(req, root)
+	|| connection(req, root))
+		return req;
+	return req;
+}
+
+
+static void
+initreq(Request *req)
+{
+	req->host = -1;
+	req->target = NULL;
+	req->status = 200;
+}
+
+
+static int
+method(Request *req, _Token *root)
+{
+	int i;
+	_Token *tok;
+	Node mthd;
+
 	if ((tok = searchTree(root, "method")) == NULL) {
 		req->status = 400;
-		return req;
+		return 1;
 	}
-	method.value = getElementValue(tok->node, &method.len);
-	if (!strncmp(method.value, methods[GET], method.len)) {
-		req->method = GET;
-	} else if (!strncmp(method.value, methods[HEAD], method.len)){
-		req->method = HEAD;
-	} else {
-        req->status = 501;
-		return req;
+	mthd.value = getElementValue(tok->node, &mthd.len);
+	for (i = 0; i < N_METHODS; i++) {
+		if (!strncmp(mthd.value, methods[i], mthd.len)) {
+			req->method = i;
+			purgeElement(&tok);
+			return 0;
+		}
 	}
+    req->status = 501;
 	purgeElement(&tok);
+	return 1;
+}
 
-	/* Traitement champ "Request-target" */
+
+static int
+request_target(Request *req, _Token *root)
+{
+	_Token *tok;
+	Node target;
+
 	if ((tok = searchTree(root, "absolute_path")) == NULL) {
 		req->status = 400;
-		return req;
+		return 1;
 	}
 	target.value = getElementValue(tok->node, &target.len);
-	pct_normalize(&target);
-	remove_dot_segments(&target);
-	memmove(target.value, target.value + 1, target.len - 1);
-	target.value[target.len - 1] = '\0';
-	req->target = target.value;
+	req->target = emalloc((target.len + 1) * sizeof(char));
+	strncpy(req->target, target.value, target.len);
+	req->target[target.len] = '\0';
+	pct_normalize(req->target);
+	remove_dot_segments(req->target);
 	purgeElement(&tok);
+	return 0;
+}
 
-	/* Traitement champ "HTTP-version" */
+
+static int
+http_version(Request *req, _Token *root)
+{
+	_Token *tok;
+	Node version;
+
 	if ((tok = searchTree(root, "HTTP_version")) == NULL) {
 		req->status = 400;
-		return req;
+		return 1;
 	}
 	version.value = getElementValue(tok->node, &version.len);
 	if (!strncmp(version.value, versions[HTTP1_0], version.len)) {
@@ -80,16 +127,24 @@ semantics(_Token *root)
 		req->version = HTTP1_1;
 	} else {
 		req->status = 505;
-		return req;
+		return 1;
 	}
 	purgeElement(&tok);
+	return 0;
+}
 
-	/* Traitement champs d'en-tête */
-	/* Host */
+
+static int
+host(Request *req, _Token *root)
+{
+	_Token *tok;
+	Node host;
+	int i;
+
 	if (((tok = searchTree(root, "host")) == NULL && req->version == HTTP1_1)
 	|| tok->next != NULL) {
 		req->status = 400;
-		return req;
+		return 1;
 	}
 	purgeElement(&tok);
 
@@ -103,40 +158,56 @@ semantics(_Token *root)
 		}
 	}
 	purgeElement(&tok);
+	return 0;
+}
 
-	/* Content-length */
+
+static int
+content_length(Request *req, _Token *root)
+{
+	_Token *tok;
+	Node coding, length1, length2;
+
 	if ((tok = searchTree(root, "transfer_coding"))) {
-		req->content_length = NULL;
-	coding.value = getElementValue(tok->node, &coding.len);
+		coding.value = getElementValue(tok->node, &coding.len);
 		if (strncmp(coding.value, CHUNKED, coding.len)) {
 			req->status = 400;
-			return req;
+			return 1;
 		}
 		if ((tok = searchTree(root, "Content_Length"))) {
 			req->status = 400;
-			return req;
+			return 1;
 		}
 		purgeElement(&tok);
 	} else {
 		if ((tok = searchTree(root, "Content_Length"))) {
 			while (tok->next != NULL) {
-	length1.value = getElementValue(tok->node, &length1.len);
-	length2.value = getElementValue(tok->node, &length2.len);
+				length1.value = getElementValue(tok->node, &length1.len);
+				length2.value = getElementValue(tok->node, &length2.len);
 				if (length1.len != length2.len
 				|| strncmp(length1.value, length2.value, length1.len)) {
 					req->status = 400;
-					return req;
+					return 1;
 				}
 				tok = tok->next;
 			}
 			purgeElement(&tok);
 		}
 	}
+	return 0;
+}
 
-	/* Connexion*/
+
+static int
+connection(Request *req, _Token *root)
+{
+	_Token *tok;
+	Node connection;
+	int i;
+
 	if ((tok = searchTree(root, "connection_option"))) {
 		do {
-	connection.value = getElementValue(tok->node, &connection.len);
+			connection.value = getElementValue(tok->node, &connection.len);
 			if (connection.len == strlen(connections[CLOSE])) {
 				for (i = 0; i < connection.len; i++) {
 					if (tolower(connection.value[i]) != connections[CLOSE][i])
@@ -164,115 +235,122 @@ semantics(_Token *root)
 	if (req->connection != CLOSE && req->version == HTTP1_1) {
 		req->connection = KEEP_ALIVE;
 	}
-		if (req->connection != CLOSE && req->connection != KEEP_ALIVE) {
+	if (req->connection != CLOSE && req->connection != KEEP_ALIVE) {
 		req->connection = CLOSE;
 	}
 	req->status = 200;
-	return req;
+	return 0;
 }
 
-void static
-pct_normalize(Node *node)
+
+static void
+pct_normalize(char *target)
 {
 	int i;
 	char buf[3];
+	int len;
 
 	buf[2] = '\0';
+	len = strlen(target);
 
 	/* While room for pct-encoded */
-	for (i = 0; i + 2 < node->len; i++) {
-		if (node->value[i] == '%'
-		&& isxdigit(node->value[i + 1])
-		&& isxdigit(node->value[i + 2])) {
+	for (i = 0; i + 2 < len; i++) {
+		if (target[i] == '%'
+		&& isxdigit(target[i + 1])
+		&& isxdigit(target[i + 2])) {
 			/* Format string for strtol */
-			strncpy(buf, node->value + i + 1, 2);
-			node->value[i] = strtol(buf, NULL, 16);
-			/* Copy rest of s to the left */
-			memmove(node->value + i + 1, node->value + i + 3, node->len - i - 3);
-			node->len -= 2;
+			strncpy(buf, target + i + 1, 2);
+			target[i] = strtol(buf, NULL, 16);
+			/* Move target to left */
+			memmove(target + i + 1, target + i + 3, len - i - 3);
+			len -= 2;
+			target[len] = '\0';
 		}
 	}
 }
 
+
 /* See RFC 3986 Section 5.2.4.*/
-void static
-remove_dot_segments(Node *node)
+static void
+remove_dot_segments(char *target)
 {
 	int i, j;
 	char *buf;
+	int len;
 
-	buf = emalloc(node->len * sizeof(char));
+	len = strlen(target);
+	buf = emalloc(len * sizeof(char));
 
 	buf[0] = '\0';
 	i = j = 0;
-	while (i < node->len) {
+	while (i < len) {
 		/* A */
-		if (i <= node->len - strlen("../")
-		&& node->value[i] == '.'
-		&& node->value[i + 1] == '.'
-		&& node->value[i + 2] == '/') {
+		if (i <= len - strlen("../")
+		&& target[i] == '.'
+		&& target[i + 1] == '.'
+		&& target[i + 2] == '/') {
 			i += strlen("../");
-		} else if (i <= node->len - strlen("./")
-		&& node->value[i] == '.'
-		&& node->value[i + 1] == '/') {
+		} else if (i <= len - strlen("./")
+		&& target[i] == '.'
+		&& target[i + 1] == '/') {
 			i += strlen("./");
 		/* B */
-		} else if (i <= node->len - strlen("/./")
-		&& node->value[i] == '/'
-		&& node->value[i + 1] == '.'
-		&& node->value[i + 2] == '/') {
+		} else if (i <= len - strlen("/./")
+		&& target[i] == '/'
+		&& target[i + 1] == '.'
+		&& target[i + 2] == '/') {
 			i += strlen("/.");
-		} else if (i <= node->len - strlen("/.")
-		&& node->value[i] == '/'
-		&& node->value[i + 1] == '.'
-		&& i + 2 == node->len ) {
+		} else if (i <= len - strlen("/.")
+		&& target[i] == '/'
+		&& target[i + 1] == '.'
+		&& i + 2 == len ) {
 			i += strlen("/");
-			node->value[i + 1] = '/';
+			target[i + 1] = '/';
 		/* C */
-		} else if (i <= node->len - strlen("/../")
-		&& node->value[i] == '/'
-		&& node->value[i + 1] == '.'
-		&& node->value[i + 2] == '.'
-		&& node->value[i + 3] == '/') {
+		} else if (i <= len - strlen("/../")
+		&& target[i] == '/'
+		&& target[i + 1] == '.'
+		&& target[i + 2] == '.'
+		&& target[i + 3] == '/') {
 			i += strlen("/..");
 			if (j != 0) {
 				while (buf[j] != '/') {
 					j--;
 				}
 			}
-		} else if (i <= node->len - strlen("/..")
-		&& node->value[i] == '/'
-		&& node->value[i + 1] == '.'
-		&& node->value[i + 2] == '.'
-		&& i + 3 == node->len) {
+		} else if (i <= len - strlen("/..")
+		&& target[i] == '/'
+		&& target[i + 1] == '.'
+		&& target[i + 2] == '.'
+		&& i + 3 == len) {
 			i += strlen("/.");
-			node->value[i + 2] = '/';
+			target[i + 2] = '/';
 			if (j != 0) {
 				while (buf[j] != '/') {
 					j--;
 				}
 			}
 		/* D */
-		} else if ( i <= node->len - strlen(".")
-		&& node->value[i] == '.'
-		&& i + 1 == node->len){
+		} else if ( i <= len - strlen(".")
+		&& target[i] == '.'
+		&& i + 1 == len){
 			i += strlen(".");
-		} else if (i <= node->len - strlen("..")
-		&& node->value[i] == '.'
-		&& node->value[i + 1] == '.'
-		&& i + 2 == node->len) {
+		} else if (i <= len - strlen("..")
+		&& target[i] == '.'
+		&& target[i + 1] == '.'
+		&& i + 2 == len) {
 			i += strlen("..");
 		/* E */
 		} else {
 			do {
-				buf[j] = node->value[i];
+				buf[j] = target[i];
 				j++;
 				i++;
-			} while (i < node->len && node->value[i] != '/');
+			} while (i < len && target[i] != '/');
 		}
 	}
 	/* Replace by interpreted string */
-	memmove(node->value, buf, j);
+	memmove(target, buf + 1, j - 1);
 	free(buf);
-	node->len = j;
+	target[j - 1] = '\0';
 }
