@@ -34,7 +34,7 @@ semantics(_Token *root)
     Node method, target, version, connection, coding, length1, length2, host;
 	Request *req;
 	int i;
-	
+
 	req = emalloc(sizeof(Request));
 
 	req->host = -1;
@@ -103,7 +103,7 @@ semantics(_Token *root)
 		}
 	}
 	purgeElement(&tok);
-	
+
 	/* Content-length */
 	if ((tok = searchTree(root, "transfer_coding"))) {
 		req->content_length = NULL;
@@ -185,7 +185,7 @@ pct_normalize(Node *node)
 		&& isxdigit(node->value[i + 1])
 		&& isxdigit(node->value[i + 2])) {
 			/* Format string for strtol */
-			strncpy(buf, node->value + i + 1, 3);
+			strncpy(buf, node->value + i + 1, 2);
 			node->value[i] = strtol(buf, NULL, 16);
 			/* Copy rest of s to the left */
 			memmove(node->value + i + 1, node->value + i + 3, node->len - i - 3);
@@ -200,9 +200,9 @@ remove_dot_segments(Node *node)
 {
 	int i, j;
 	char *buf;
-	
+
 	buf = emalloc(node->len * sizeof(char));
-	
+
 	buf[0] = '\0';
 	i = j = 0;
 	while (i < node->len) {

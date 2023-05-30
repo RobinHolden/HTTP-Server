@@ -20,14 +20,19 @@
 #include "api.h"
 
 #include "semantics.h"
+#include "mime.h"
 #include "util.h"
 
 #define PORT 8080
 #define CONNECTION "Connection: "
 #define CONTENT_LENGTH "Content-Length: "
+#define CONTENT_TYPE "Content-Type: "
+#define DEFAULT_TYPE "application/octet-stream"
 #define CRLF "\r\n"
 #define WWW "www"
 #define DFLT_TARG "index.html"
+
+int content_type(char *target);
 
 char * const status[] = {
 	[200] = "HTTP/1.1 200 OK",
@@ -47,10 +52,12 @@ int main(int argc, char *argv[])
 	char *body;
 	char *length;
 	char *target;
+	int type;
 	int i, j, k;
 
 	while (1) {
 		// On attend la reception d'une requete HTTP, request pointera vers une ressource allouée par librequest.
+		printf("Waiting for request...\n");
 		if ((request = getRequest(PORT)) == NULL)
 			return -1;
 
@@ -65,7 +72,6 @@ int main(int argc, char *argv[])
 			req = semantics(root);
 			printf("Valid request semantics\n");
 
-			printf("Fetching requested resource...\n");
 			/* Open target file */
 			if (req->host == -1) {
 				req->host = SITE1_FR;
@@ -90,6 +96,7 @@ int main(int argc, char *argv[])
 			for (k = 0; k < strlen(req->target); k++) {
 				target[i + j + k] = req->target[k];
 			}
+			printf("Fetching requested resource: %s\n", target);
 			if ((fi = open(target, O_RDWR)) == -1) {
 				req->status = 404;
         	} else {
@@ -120,6 +127,17 @@ int main(int argc, char *argv[])
 					sprintf(length, "%ld", st.st_size);
 					writeDirectClient(request->clientId, length, strlen(length));
 					writeDirectClient(request->clientId, CRLF, strlen(CRLF));
+					/* Content-Type */
+					writeDirectClient(request->clientId, CONTENT_TYPE, strlen(CONTENT_TYPE));
+					if ((type = content_type(target)) != -1 && content_types[type][1][0] != '\0') {
+						printf("Content-Type: %s\n", content_types[type][1]);
+						writeDirectClient(request->clientId, content_types[type][1], strlen(content_types[type][1]));
+					} else {
+						printf("Content-Type: %s\n", DEFAULT_TYPE);
+						writeDirectClient(request->clientId, DEFAULT_TYPE, strlen(DEFAULT_TYPE));
+					}
+					writeDirectClient(request->clientId, CRLF, strlen(CRLF));
+
 					writeDirectClient(request->clientId, CRLF, strlen(CRLF));
 					/* Write body */
 					writeDirectClient(request->clientId, body, st.st_size);
@@ -145,4 +163,30 @@ int main(int argc, char *argv[])
 		freeRequest(request);
 	}
 	return (1);
+}
+
+int
+content_type(char *target)
+{
+	int i, j;
+
+	while (target && *target != '.') {
+		target++;
+	}
+	if (!target) {
+		return -1;
+	} else {
+		target++;
+	}
+	for (i = 0; i < N_TYPES; i++) {
+		if (strlen(target) == strlen(content_types[i][0])) {
+			for (j = 0; j < strlen(target); j++) {
+				if (content_types[i][0][j] != target[j])
+					break;
+			}
+			if (j == strlen(target))
+				return i;
+		}
+	}
+	return -1;
 }
