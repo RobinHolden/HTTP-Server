@@ -80,7 +80,11 @@ int main(int argc, char *argv[])
 			target = buildtarget(req);
 			printf("Fetching requested resource: %s\n", target);
 			/* Open file and save size */
-			if ((fi = open(target, O_RDWR)) == -1) {
+			if ((fi = open(target, O_RDONLY)) == -1) {
+				if (errno == EACCES)
+					error("No access to target file");
+				if (errno == ENOENT)
+					error("No such file exists");
 				req->status = 404;
         	} else {
 				if (fstat(fi, &st) == -1) /* To obtain file size */
@@ -174,6 +178,7 @@ buildtarget(Request *req)
 	target[i + j + k] = '\0';
 
 	if (!strcmp(target + strlen(target) - strlen(".php"), ".php")) {
+		printf("php file detected: %s", target);
         phptohtml(target);
 		free(target);
 		target = strdup(PHP_RESULT_FILE);

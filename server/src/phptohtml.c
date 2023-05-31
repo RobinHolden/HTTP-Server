@@ -34,6 +34,7 @@ void phptohtml(char *phpfile)
 // TEST ///
 
 	FCGI_Header h;
+	printf("***BEGIN PHPTOHTML***\n");
 	fd=createSocket(9000);
 	sendBeginRequest(fd,10,FCGI_RESPONDER,FCGI_KEEP_CONN);
 	h.version=FCGI_VERSION_1;
@@ -65,6 +66,7 @@ void phptohtml(char *phpfile)
 		fprintf(fp, "%.*s\n", h.contentLength, h.contentData);
 	} while ((len != 0 ) && (h.type != FCGI_END_REQUEST));
 	fclose(fp);
+	printf("***END PHPTOHTML***\n");
 }
 
 // =========================================================================================================== //
