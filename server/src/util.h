@@ -4,5 +4,6 @@
 #include <stdio.h>
 
 void *emalloc(size_t size);
+void error(char *err);
 
 #endif

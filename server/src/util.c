@@ -14,3 +14,10 @@ void
     }
 	return p;
 }
+
+void
+error(char *err)
+{
+    perror(err);
+    exit(EXIT_FAILURE);
+}

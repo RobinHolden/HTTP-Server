@@ -15,11 +15,6 @@ enum versions {
     HTTP1_1,
     N_VERSIONS
 };
-enum hosts {
-    SITE1_FR,
-    SITE2_FR,
-    N_HOSTS
-};
 enum connections {
     KEEP_ALIVE,
     CLOSE,
@@ -28,7 +23,6 @@ enum connections {
 extern char * const methods[];
 extern char * const versions[];
 extern char * const connections[];
-extern char * const hosts[];
 
 #define CHUNKED "chunked"
 

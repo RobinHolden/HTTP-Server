@@ -6,6 +6,7 @@
 #include "api.h"
 #include "semantics.h"
 #include "util.h"
+#include "conf.h"
 
 static void initreq(Request *req);
 static int method(Request *req, _Token *root);
@@ -29,10 +30,6 @@ char *const versions[] = {
 char *const connections[] = {
 	[KEEP_ALIVE] = "keep-alive",
 	[CLOSE] = "close"
-};
-char * const hosts[] = {
-	[SITE1_FR] = "site1.fr",
-	[SITE2_FR] = "site2.fr"
 };
 
 Request *

@@ -1,8 +1,8 @@
 MAIN = http-server
 SRC_C = $(wildcard src/*.c)
-CFLAGS = -Wall -g -O0 -fsanitize=address
+CFLAGS = -Wall -g -O0
 IFLAGS = -I api/libparser -I api/librequest-0.5/
-LFLAGS = -L api/libparser -L api/librequest-0.5/ -lparser -lrequest -lm
+LFLAGS = -L api/libparser -L api/librequest-0.5/ -lparser -lrequest -lm -lmagic
 
 $(MAIN): $(SRC_C)
 	gcc $^ -o $@ $(CFLAGS) $(IFLAGS) $(LFLAGS)
