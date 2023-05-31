@@ -23,7 +23,7 @@
 #include "content_type.h"
 #include "util.h"
 #include "conf.h"
-#include "phpserver.h"
+#include "phptohtml.h"
 
 #define CONNECTION "Connection: "
 #define CONTENT_LENGTH "Content-Length: "

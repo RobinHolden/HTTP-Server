@@ -11,8 +11,19 @@
 #include <arpa/inet.h>
 
 #include "fastcgi.h"
-#include "phpserver.h"
+#include "phptohtml.h"
 #include "util.h"
+
+static int createSocket(int port);
+static size_t readSocket(int fd,char *buf,size_t len);
+static void readData(int fd,FCGI_Header *h,size_t *len);
+static void writeSocket(int fd,FCGI_Header *h,unsigned int len);
+static void writeLen(int len, char **p);
+static int addNameValuePair(FCGI_Header *h,char *name,char *value);
+static void sendGetValue(int fd);
+static void sendBeginRequest(int fd,unsigned short requestId,unsigned short role,unsigned char flags);
+static void sendAbortRequest(int fd,unsigned short requestId);
+static void sendWebData(int fd,unsigned char type,unsigned short requestId,char *data,unsigned int len);
 
 void phptohtml(char *phpfile)
 {
@@ -58,10 +69,10 @@ void phptohtml(char *phpfile)
 
 // =========================================================================================================== //
 
-size_t readSocket(int fd,char *buf,size_t len)
+static size_t readSocket(int fd,char *buf,size_t len)
 {
-size_t readlen=0;
-ssize_t nb=0;
+	size_t readlen=0;
+	ssize_t nb=0;
 
 	if (len==0) return 0;
 
@@ -78,7 +89,7 @@ ssize_t nb=0;
 }
 //============================================================================================================ //
 
-void readData(int fd,FCGI_Header *h,size_t *len)
+static void readData(int fd,FCGI_Header *h,size_t *len)
 {
 	size_t nb;
 	*len=0;
@@ -98,7 +109,7 @@ void readData(int fd,FCGI_Header *h,size_t *len)
 }
 
 // =========================================================================================================== //
-void writeSocket(int fd,FCGI_Header *h,unsigned int len)
+static void writeSocket(int fd,FCGI_Header *h,unsigned int len)
 {
 	int w;
 
@@ -116,7 +127,7 @@ void writeSocket(int fd,FCGI_Header *h,unsigned int len)
 }
 
 // =========================================================================================================== //
-void writeLen(int len, char **p)
+static void writeLen(int len, char **p)
 {
 	if (len > 0x7F ) {
 		*((*p)++)=(len>>24)&0x7F;
@@ -127,7 +138,7 @@ void writeLen(int len, char **p)
 }
 
 // =========================================================================================================== //
-int addNameValuePair(FCGI_Header *h,char *name,char *value)
+static int addNameValuePair(FCGI_Header *h,char *name,char *value)
 {
 	char *p;
 	unsigned int nameLen=0,valueLen=0;
@@ -150,7 +161,7 @@ int addNameValuePair(FCGI_Header *h,char *name,char *value)
 }
 // =========================================================================================================== //
 
-void sendGetValue(int fd)
+static void sendGetValue(int fd)
 {
 FCGI_Header h;
 
@@ -166,7 +177,7 @@ FCGI_Header h;
 }
 
 // =========================================================================================================== //
-void sendBeginRequest(int fd,unsigned short requestId,unsigned short role,unsigned char flags)
+static void sendBeginRequest(int fd,unsigned short requestId,unsigned short role,unsigned char flags)
 {
 FCGI_Header h;
 FCGI_BeginRequestBody *begin;
@@ -182,7 +193,7 @@ FCGI_BeginRequestBody *begin;
 	writeSocket(fd,&h,FCGI_HEADER_SIZE+(h.contentLength)+(h.paddingLength));
 }
 // =========================================================================================================== //
-void sendAbortRequest(int fd,unsigned short requestId)
+static void sendAbortRequest(int fd,unsigned short requestId)
 {
 FCGI_Header h;
 
@@ -198,7 +209,7 @@ FCGI_Header h;
 
 //============================================================================================================ //
 
-void sendWebData(int fd,unsigned char type,unsigned short requestId,char *data,unsigned int len)
+static void sendWebData(int fd,unsigned char type,unsigned short requestId,char *data,unsigned int len)
 {
 FCGI_Header h;
 
