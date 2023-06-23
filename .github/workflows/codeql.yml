@@ -69,8 +69,9 @@ jobs:
 
     - run: |
         echo "Run, Build Application using script"
-        make -C parser
-        ./parser/http-server tests/test0.txt
+        chmod +x parser/tmp.sh
+        make -C parser tests
+    #    ./parser/http-server tests/test0.txt
     #    ./location_of_script_within_repo/buildscript.sh
 
     - name: Perform CodeQL Analysis
