@@ -69,7 +69,7 @@ jobs:
 
     - run: |
         echo "Run, Build Application using script"
-        make -C parser
+        make -C parser tests
         ./
     #    ./location_of_script_within_repo/buildscript.sh
 
